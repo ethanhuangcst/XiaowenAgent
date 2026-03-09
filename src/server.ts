@@ -1,7 +1,8 @@
 import cors from "cors";
 import express from "express";
 import { z } from "zod";
-import { generateAllContent } from "./contentAgent.js";
+import { createProject, getProject, generateOutline } from "./api/controllers/workflowController.js";
+import { generateAllContent } from "./core/content/generator.js";
 
 const requestSchema = z.object({
   topic: z.string().min(2),
@@ -22,6 +23,12 @@ export function createServer() {
     res.json({ status: "ok" });
   });
 
+  // Project workflow routes
+  app.post("/api/projects", createProject);
+  app.get("/api/projects/:id", getProject);
+  app.post("/api/projects/:id/outline", generateOutline);
+
+  // Legacy direct generation route
   app.post("/api/generate", async (req, res) => {
     const parsed = requestSchema.safeParse(req.body);
     if (!parsed.success) {

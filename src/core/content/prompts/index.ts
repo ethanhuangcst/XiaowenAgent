@@ -1,4 +1,4 @@
-import { GenerateInput } from "./types.js";
+import { GenerateInput } from "../../../types/index.js";
 
 export function buildWechatPrompt(input: GenerateInput): string {
   return `

@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { env } from "./config.js";
+import { env } from "../config/index.js";
 
 const client = new OpenAI({
   apiKey: env.OPENAI_API_KEY,
@@ -7,23 +7,24 @@ const client = new OpenAI({
 });
 
 export async function generateJson<T>(system: string, user: string): Promise<T> {
-  const completion = await client.responses.create({
+  const completion = await client.chat.completions.create({
     model: env.OPENAI_MODEL,
-    input: [
+    messages: [
       { role: "system", content: system },
       { role: "user", content: user }
     ],
-    text: {
-      format: {
-        type: "json_object"
-      }
+    response_format: {
+      type: "json_object"
     }
   });
 
-  const output = completion.output_text;
+  let output = completion.choices[0].message.content;
   if (!output) {
     throw new Error("模型未返回内容");
   }
+
+  // Remove markdown code blocks if present
+  output = output.replace(/```json\n?|\n?```/g, "").trim();
 
   return JSON.parse(output) as T;
 }

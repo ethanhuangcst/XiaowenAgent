@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { generateJson } from "./llm.js";
-import { buildVideoPostPrompt, buildWechatPrompt } from "./prompts.js";
-import { GenerateInput, GeneratedContent } from "./types.js";
+import { generateJson } from "../../lib/llm.js";
+import { buildVideoPostPrompt, buildWechatPrompt } from "./prompts/index.js";
+import { GenerateInput, GeneratedContent } from "../../types/index.js";
 
 const wechatSchema = z.object({
   titleOptions: z.array(z.string()).min(3).max(8),
