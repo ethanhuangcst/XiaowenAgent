@@ -12,7 +12,9 @@ export async function generateJson<T>(system: string, user: string, providerId?:
 
   const client = new OpenAI({
     apiKey: provider.apiKey,
-    baseURL: provider.baseURL
+    baseURL: provider.baseURL,
+    timeout: 300000,
+    maxRetries: 2
   });
 
   const completion = await client.chat.completions.create({
@@ -23,7 +25,9 @@ export async function generateJson<T>(system: string, user: string, providerId?:
     ],
     response_format: {
       type: "json_object"
-    }
+    },
+    max_tokens: 4000,
+    temperature: 0.7
   });
 
   let output = completion.choices[0].message.content;
@@ -31,7 +35,6 @@ export async function generateJson<T>(system: string, user: string, providerId?:
     throw new Error("模型未返回内容");
   }
 
-  // Remove markdown code blocks if present
   output = output.replace(/```json\n?|\n?```/g, "").trim();
 
   return JSON.parse(output) as T;

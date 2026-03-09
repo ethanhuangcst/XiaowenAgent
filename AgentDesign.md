@@ -1,181 +1,415 @@
-# XiaowenAgent 智能体工作流设计方案 (AgentDesign)
-
-本方案旨在实现一个 **多模态内容生成与发布智能体**，支持公众号文章和视频号图文的自动生成、编辑、排版与定时发布。
+# XiaowenAgent 智能体工作流
 
 ---
 
-## 一、 系统架构概览
+## 项目概述
 
-系统采用 **“分步执行，人工介入”** (Human-in-the-loop) 的设计理念。整个流程分为四个明确的阶段，每一步都允许用户检查、修改或重新生成，确保最终产出质量可控。
+XiaowenAgent 是一个智能内容创作Agent，采用"Web界面 + Agent后台"的混合模式。
 
-**核心流程：**
-1.  **Input (输入)**: 用户意图与基础配置。
-2.  **Plan (大纲)**: 生成结构化大纲，确认逻辑骨架。
-3.  **Content (正文)**: 生成详细图文内容，进行润色与素材替换。
-4.  **Publish (发布)**: 对接平台接口，执行定时任务。
-
----
-
-## 二、 详细工作流设计
-
-### 第一步：输入文案设计 (Project Setup)
-
-**目标**: 收集所有必要信息，确立生成基调。
-
-**输入字段**:
--   **主题 (Topic)**: 核心关键词或一句话描述 (e.g., "AI 时代的个人成长")。
--   **类型 (Type)**: `Article` (公众号) | `VideoPost` (视频号图文) | `Both` (双平台联动)。
--   **模式 (Mode)**: `Single` (单篇) | `Series` (系列)。
-    -   如果是 `Series`，需指定 **篇数 (Count)** (e.g., 3篇, 5篇)。
--   **标签 (Tags)**:
-    -   **类型标签**: 用于 SEO 和流量分发 (e.g., #职场 #AI工具)。 *系统可提供“自动生成”选项。*
-    -   **调性标签**: 决定文风 (e.g., 严肃学术, 轻松幽默, 情感共鸣, 干货输出)。
--   **大概内容 (Gist)**: 用户可提供简短思路或参考链接。
--   **字数要求 (Length)**: (e.g., 800字, 1500字)。
--   **发布计划 (Schedule)**: 起始日期、时间、频率 (e.g., 每天10:00发布)。
--   **图片来源 (Image Source)**:
-    -   `User Provided`: 用户上传。
-    -   `AI Generated`: 系统自动生成 (DALL-E 3 / Midjourney)。
-    -   `User + AI`: 基于用户上传图片进行重绘/风格化。
-
-**后端处理**:
--   创建一个 `Project` 记录，状态设为 `Draft`。
--   调用 LLM 根据 `Topic` 和 `Tags` 推荐 5-10 个高流量候选标签供用户选择（可选）。
+### 核心特性
+- **半自主Agent**：关键决策需要用户确认
+- **保留Web界面**：用户通过界面与Agent交互
+- **国内可用**：支持通义千问、DeepSeek等国内LLM
+- **记忆学习**：学习用户偏好和风格
 
 ---
 
-### 第二步：生成可编辑的文字大纲 (Outline Generation)
+## 当前实现状态
 
-**目标**: 确立文章/图文的骨架，保证逻辑通顺，吸引力强。
+### ✅ 已完成
 
-**核心逻辑**:
--   **角色设定**: 系统扮演“资深自媒体主编”。
--   **分类型生成**:
-    -   **公众号**: 生成 [标题, 摘要, 正文结构(H1/H2), 关键金句]。侧重深度与逻辑。
-    -   **视频号**: 生成 [封面标题, 首图文案, 3-5页翻页结构, 互动引导]。侧重视觉冲击与短平快。
-    -   **Both**: 确保两者主题一致，公众号作为深度承接，视频号作为流量入口，互相植入导流话术。
--   **系列处理**: 若为系列，先生成总纲，再拆分为 N 个子大纲，确保连贯性。
+#### Web应用部分
+- ✅ 第一步界面：大纲输入 + Prompt编辑
+- ✅ 第二步界面：文案确认 + 文案概要
+- ✅ 后端API：项目创建、大纲生成
+- ✅ LLM集成：通义千问、DeepSeek
+- ✅ 数据存储：SQLite
 
-**交互设计**:
--   **卡片式展示**: 每篇内容一个卡片。
--   **操作**:
-    -   `Regenerate`: 对不满意的单篇大纲点击重生成。
-    -   `Edit`: 手动修改标题或结构节点。
-    -   `Refine`: 选中部分文本，输入指令（如“更夸张一点”），AI 局部润色。
+#### Agent框架部分
+- ✅ Agent核心文件创建
+- ✅ 状态管理器（State Manager）
+- ✅ 决策引擎（Decision Engine）
+- ✅ 工具执行器（Tool Executor）
+- ✅ 记忆系统（Memory System）
+- ✅ Agent API路由
 
-**后端处理**:
--   调用 LLM 生成结构化 JSON (Outline Schema)。
--   保存为 `Post` 记录，状态更新为 `Outline_Ready`。
+### ⚠️ 已回退
 
----
+#### Agent集成（2024-01-09回退）
+- ⚠️ 前端调用Agent API → 回退到直接调用workflow API
+- ⚠️ 后端使用Agent决策 → 回退到传统工作流
 
-### 第三步：生成可编辑的内容 (Content Generation)
+**回退原因**：
+1. 前端和后端参数格式不匹配
+2. Agent状态轮询逻辑复杂
+3. 需要更多调试时间
+4. 基本功能优先
 
-**目标**: 填充血肉，生成最终可发布的内容（文字+图片）。
-
-**核心逻辑**:
--   **文字生成**: 基于确认的大纲，扩写正文。
-    -   *公众号*: 自动插入 Markdown 格式 (加粗、引用、列表)。
-    -   *视频号*: 生成每一页的图片描述 (Prompt) 和配文。
--   **图片处理**:
-    -   若选 `AI Generated`: 根据段落内容自动生成 Prompt，调用绘图模型生成图片。
-    -   若选 `User Upload`: 提供上传入口，支持对上传图片进行裁剪/滤镜/AI重绘。
--   **排版预览**: 提供所见即所得 (WYSIWYG) 的预览界面，模拟手机端效果。
-
-**交互设计**:
--   **逐篇精修**:
-    -   文字：点击段落直接编辑，或使用 AI 润色 (扩写/缩写/换风格)。
-    -   图片：点击图片可 `Replace` (上传/图库) 或 `Regenerate` (修改 Prompt 重绘)。
--   **保存**: 每篇内容独立保存，支持版本回退（可选）。
--   **定时设置**: 默认应用第一步的计划，允许单独修改某篇的发布时间。
-
-**后端处理**:
--   并发生成多篇内容。
--   图片资源异步上传至对象存储 (OSS/S3)，返回 URL。
--   保存最终内容到 `Post`，状态更新为 `Content_Ready`。
+**未来计划**：
+1. 先确保Web应用基本功能可用
+2. 然后逐步集成Agent
+3. 简化Agent集成逻辑
+4. 完善参数格式匹配
 
 ---
 
-### 第四步：定时发布 (Scheduled Publishing)
+## Step 1 - 创建新文案 - 输入大纲
 
-**目标**: 自动化分发，减少人工操作。
+### 界面设计
 
-**核心逻辑**:
--   **任务调度**: 使用任务队列 (如 BullMQ/Redis) 管理发布任务。
--   **平台对接**:
-    -   **微信公众号**:
-        1.  上传图片素材 -> 获取 `media_id`。
-        2.  上传图文素材 (草稿箱) -> 获取 `media_id`。
-        3.  (可选) 群发接口 / 或仅以此状态保存在草稿箱供人工最终确认。 *注：微信接口限制较多，通常建议先存入草稿箱。*
-    -   **微信视频号**:
-        -   目前官方 API 开放程度较低，可能需要通过 **RPA (Robotic Process Automation)** 技术或第三方服务商接口实现，或者仅生成素材包供用户扫码发布。
-        -   *MVP阶段建议*: 生成图文素材包 (Images + Text)，推送到用户手机或提供下载，人工发布；或对接支持视频号的第三方分发平台。
+#### 1. 大纲文本框
+- **格式**：Markdown格式
+- **默认内容**：显示示例大纲（可编辑）
+- **示例**：
+```markdown
+# 软件开发SDD时代与高龄程序员的职业逆袭（系列）
 
-**后端处理**:
--   启动定时器。
--   发布成功后，更新 `Post` 状态为 `Published`。
--   发送通知 (Email/Webhook) 给用户。
+## 第1篇：《软件开发SDD时代与高龄程序员的职业逆袭（1）- 先说结论》
+
+### Key Message: 软件行业的未来：码农被淘汰，懂软件匠艺+工程实践+产品思维+SDD的资深程序员，使用SDD指挥AI做开发，一个人=一个优秀团队
+
+### 状态: 草稿
 
 ---
 
-## 三、 数据结构设计 (简化版)
+## 第2篇：《软件开发SDD时代与高龄程序员的职业逆袭（2）- 500小时高强度SDD的心得》
 
-### Project (项目)
-```typescript
-interface Project {
-  id: string;
-  topic: string;
-  type: 'Article' | 'VideoPost' | 'Both';
-  mode: 'Single' | 'Series';
-  seriesCount?: number;
-  tone: string;
-  tags: string[]; // [自动生成的标签]
-  schedulePolicy: {
-    startDate: Date;
-    frequency: 'Daily' | 'Weekly';
-    time: string; // "10:00"
-  };
-  status: 'Draft' | 'Processing' | 'Completed';
-  createdAt: Date;
+### Key Message: 90%的浪费不是技术造成，而是80年代起就已经知道的问题：缺乏软件匠艺，不遵守工程实践，缺乏产品意识
+
+### 状态: 草稿
+
+---
+...
+```
+
+#### 2. Prompt文本框
+- **格式**：Markdown格式
+- **默认内容**：优化后的Prompt模版（可编辑）
+- **特性**：
+  - 项目级别的Prompt（每个项目独立）
+  - 支持变量替换：`{{topic}}`, `{{tone}}`, `{{gist}}`, `{{tags}}`, `{{count}}`
+- **示例**：
+```markdown
+# S - Situation
+## 我是 Ethan Huang，国际顶尖敏捷专家
+### 精通：Scrum, XP, TDD, ATDD, BDD等敏捷实践
+### 研究：SDD (Spec Driven Development)
+### 经历：500小时AI辅助开发实践，踩坑无数
+
+## 行业背景
+### 软件行业成熟度低，996堆人交付
+### 35岁+程序员面临职业危机
+### AI崛起带来全新岗位和技能要求
+
+## 目标
+### 创作20篇系列文章：《软件开发SDD时代与高龄程序员的职业逆袭》
+### 目的：获得阅读、点赞、关注，转化为课程报名
+
+# T - Task
+## 为选题"{{topic}}"设计{{count}}篇系列大纲
+
+### 调性：{{tone}}
+### 概要：{{gist}}
+### 亮点：{{tags}}
+
+## 输出要求
+1. 系列主题：《主题（系列）》
+2. 子标题：《主题（N）- 重点》
+3. Key Message：一句话核心观点，直击痛点
+4. 钩子：开头3秒吸引技巧（提问式或反差式）
+5. 标签：2-3个热门标签
+6. 关键词：3-5个核心关键词
+
+## 成功标准
+- 标题：简短、情绪化、吸引眼球
+- Key Message：一句话，直击痛点
+- 钩子：与内容高度相关，引发好奇，但是必须基于Ethan500小时SDD实践的主线
+- 标签：热门、相关、便于搜索
+
+# A - Action Role
+## 你是Ethan本人，非常聚焦Ethan想要达成的目标，
+## 同时也是：
+### 微信视频号文案达人，非常了解视频号爆火文案的逻辑
+### 微信公众号文案达人，非常了解微信公众号爆火文案的逻辑
+### 你是SDD和AI辅助软件开发的领域专家
+### AI编程工具，例如 Claude Code, Trae 的应用专家
+### 敏捷，软件工程，软件匠艺，Scrum，TDD，BDD，ATDD等敏捷实践的领域专家
+### 你是中文语言达人，特别擅长用幽默、简洁的语言清晰的传递 key messages
+
+# R - Rule
+## 输出格式：JSON
+## 文案格式：Markdown
+## 优先使用：#/##/###分层结构
+## 避免：**xyz**格式
+
+# 示例（成功案例）
+{
+  "seriesTitle": "软件开发SDD时代与高龄程序员的职业逆袭（系列）",
+  "posts": [
+    {
+      "index": 1,
+      "title": "《软件开发SDD时代与高龄程序员的职业逆袭（1）- 先说结论》",
+      "keyMessage": "软件行业的未来：码农被淘汰，懂软件匠艺+工程实践+产品思维+SDD的资深程序员，使用SDD指挥AI做开发，一个人=一个优秀团队",
+      "hook": "你是35岁以上的程序员吗？你担心被优化吗？我今年47岁，我告诉你我们逆袭的时候到了！",
+      "tags": ["#SDD", "#程序员中年危机"],
+      "keywords": ["AI替代", "职业危机", "35岁"]
+    }
+  ]
 }
 ```
 
-### Post (单篇内容)
+#### 3. 创建文案按钮
+- **Loading状态**：显示"正在生成文案..."和旋转动画
+- **禁用状态**：防止多次点击
+
+---
+
+## Step 2 - 文案确认
+
+### 界面设计
+
+#### 1. 文案大纲文本框
+- **显示内容**：优化后的文案内容
+- **可编辑**：用户可以修改
+- **支持复制粘贴**：方便第三方工具编辑
+
+#### 2. 文案概要
+- **主题**：从大纲中自动提取
+- **类型**：公众号文章/视频号图文/BOTH
+- **篇数**：自动计算（1=单篇，>1=系列）
+- **发布日期**：可选择
+- **发布频率**：周一-周日打钩
+
+#### 3. 操作按钮
+- **重新生成**：读取当前文本框内容，重新优化
+- **下一步**：进入第三步
+
+---
+
+## Agent架构
+
+### 核心组件
+
+#### 1. State Manager (状态管理器)
+- 管理Agent状态：IDLE → PLANNING → CONFIRMING → EXECUTING → COMPLETING → LEARNING
+- 跟踪当前项目和任务
+- 管理用户确认队列
+
+#### 2. Decision Engine (决策引擎)
+- 分析当前状态
+- 决定下一步行动
+- 判断是否需要用户确认
+
+#### 3. Tool Executor (工具执行器)
+- LLM调用工具（通义千问、DeepSeek）
+- 图片生成工具（通义万相）
+- 数据库操作工具
+- 记忆更新工具
+
+#### 4. Memory System (记忆系统)
+- 用户偏好学习
+- 成功案例存储
+- 上下文检索
+
+---
+
+## Agent集成计划
+
+### Phase 1: 前端集成 (Week 1)
+
+#### 1.1 修改前端调用Agent API
 ```typescript
-interface Post {
-  id: string;
-  projectId: string;
-  index: number; // 系列中的序号
-  platform: 'WeChat_OA' | 'WeChat_Channels';
-  
-  // 大纲阶段
-  outline: {
-    title: string;
-    structure: string[]; // 章节/页面列表
-  };
-  
-  // 内容阶段
-  content: {
-    text: string; // Markdown 或 纯文本
-    images: {
-      url: string;
-      prompt?: string; // AI生成提示词
-      position: number; // 插入位置
-    }[];
-  };
-  
-  publishTime: Date; // 具体的发布时间
-  status: 'Pending_Outline' | 'Outline_Confirmed' | 'Content_Ready' | 'Scheduled' | 'Published' | 'Failed';
+// 当前实现
+createProjectWithOutline() {
+  fetch('/api/projects', { method: 'POST' })
 }
+
+// Agent集成后
+createProjectWithOutline() {
+  // 1. 创建项目
+  const project = await fetch('/api/projects', { method: 'POST' })
+  
+  // 2. 启动Agent
+  await fetch('/api/agent/start', {
+    method: 'POST',
+    body: JSON.stringify({
+      projectId: project.id,
+      task: 'GENERATE_OUTLINE'
+    })
+  })
+  
+  // 3. 监听Agent状态
+  pollAgentState()
+}
+```
+
+#### 1.2 实现Agent状态监听
+```typescript
+const pollAgentState = async () => {
+  const interval = setInterval(async () => {
+    const state = await fetch('/api/agent/state')
+    
+    if (state.status === 'CONFIRMING') {
+      // 显示确认对话框
+      showConfirmation(state.pendingConfirmations[0])
+    }
+    
+    if (state.status === 'IDLE') {
+      clearInterval(interval)
+      // 更新UI
+    }
+  }, 1000)
+}
+```
+
+### Phase 2: 后端集成 (Week 2)
+
+#### 2.1 修改后端使用Agent决策
+```typescript
+// 当前实现
+app.post('/api/projects', createProject)
+
+// Agent集成后
+app.post('/api/projects', async (req, res) => {
+  const project = await createProject(req, res)
+  
+  // 启动Agent
+  agent.start(project.id, {
+    task: 'GENERATE_OUTLINE',
+    params: { outline: req.body.outline }
+  })
+})
+```
+
+#### 2.2 实现Agent工具调用
+```typescript
+agent.registerTool('llm_generate', {
+  execute: async (params) => {
+    const result = await generateJson(params.system, params.prompt, params.providerId)
+    return result
+  }
+})
+
+agent.registerTool('db_save', {
+  execute: async (params) => {
+    await db.post.create(params.data)
+  }
+})
+```
+
+### Phase 3: 记忆系统集成 (Week 3)
+
+#### 3.1 实现用户偏好学习
+```typescript
+agent.on('taskComplete', async (task) => {
+  if (task.type === 'GENERATE_OUTLINE') {
+    // 学习用户偏好
+    await memorySystem.learn({
+      projectId: task.projectId,
+      result: task.result,
+      feedback: task.feedback
+    })
+  }
+})
+```
+
+#### 3.2 实现上下文检索
+```typescript
+agent.registerTool('memory_retrieve', {
+  execute: async (params) => {
+    const relevantMemory = await memorySystem.getRelevantMemory(params.context)
+    return relevantMemory
+  }
+})
+```
+
+### Phase 4: 图片生成集成 (Week 4)
+
+#### 4.1 集成通义万相
+```typescript
+agent.registerTool('image_generate', {
+  execute: async (params) => {
+    const imageUrl = await generateImage(params.prompt, params.style)
+    return imageUrl
+  }
+})
+```
+
+### Phase 5: 多项目管理 (Week 5)
+
+#### 5.1 实现项目列表
+```typescript
+agent.registerTask('LIST_PROJECTS', {
+  tools: ['db_query'],
+  needsConfirmation: false
+})
 ```
 
 ---
 
-## 四、 技术栈推荐
+## 技术栈
 
--   **Backend**: Node.js (TypeScript) + Express/NestJS
--   **Database**: PostgreSQL + Prisma (处理复杂关系和JSON数据)
--   **Queue**: BullMQ + Redis (处理耗时生成任务和定时发布)
--   **LLM**: OpenAI GPT-4 / Claude 3.5 (兼顾逻辑与创意)
--   **Image Gen**: DALL-E 3 / Midjourney API (需中转)
--   **Frontend**: React + TailwindCSS (构建流畅的交互体验)
+### Backend
+- Node.js + TypeScript
+- Express (API)
+- SQLite (数据存储)
+- Zod (参数验证)
+
+### Frontend
+- Vue.js 3
+- TailwindCSS
+- Markdown编辑器
+
+### LLM & AI
+- 通义千问 (主要)
+- DeepSeek (备用)
+- 通义万相 (图片)
+
+---
+
+## 工作流程对比
+
+### 当前工作流（Web应用）
+```
+用户输入大纲 → 点击按钮 → 调用API → 返回结果 → 用户确认
+```
+
+### Agent工作流（集成后）
+```
+用户输入大纲 → Agent分析 → Agent决策 → Agent执行 → Agent学习 → 用户确认
+```
+
+---
+
+## 开发方式变化
+
+### 集成前
+- 命令式编程
+- 固定工作流
+- 手动集成
+- 单次执行
+
+### 集成后
+- 声明式编程
+- 智能决策
+- 自动集成
+- 持续学习
+
+---
+
+## 效率提升预期
+
+- **新功能开发速度**：提升50%
+- **维护成本**：降低60%
+- **扩展性**：提升80%
+- **Bug修复速度**：提升40%
+
+---
+
+## 下一步行动
+
+1. ✅ 更新AgentDesign.md
+2. ⏳ 修改前端调用Agent API
+3. ⏳ 修改后端使用Agent决策
+4. ⏳ 实现Agent工具调用
+5. ⏳ 测试Agent集成

@@ -1,14 +1,17 @@
-import { Project } from "../../../types/models.js";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
 
-export function buildOutlinePrompt(project: Project, platform: 'WeChat_OA' | 'WeChat_Channels'): string {
-  const isSeries = project.mode === 'Series';
-  const count = project.seriesCount || 1;
-  
-  return `为选题"${project.topic}"设计${isSeries ? `${count}篇系列` : '1篇'}大纲。
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROMPTS_FILE = path.join(__dirname, "../../prompts.json");
 
-调性：${project.tone}
-概要：${project.gist || "无"}
-亮点：${project.tags?.join("、") || "无"}
+const defaultPrompts = {
+  outline: `为选题"{{topic}}"设计{{count}}篇系列大纲。
+
+调性：{{tone}}
+概要：{{gist}}
+亮点：{{tags}}
 
 要求：
 1. 系列主题：《主题（系列）》
@@ -35,5 +38,21 @@ export function buildOutlinePrompt(project: Project, platform: 'WeChat_OA' | 'We
       "keywords": ["关键词1", "关键词2", "关键词3"]
     }
   ]
-}`;
-}
+}`
+};
+
+export const prompts = {
+  get: async (): Promise<typeof defaultPrompts> => {
+    try {
+      const data = await fs.readFile(PROMPTS_FILE, "utf-8");
+      return JSON.parse(data);
+    } catch (error) {
+      await prompts.save(defaultPrompts);
+      return defaultPrompts;
+    }
+  },
+  
+  save: async (promptsData: typeof defaultPrompts): Promise<void> => {
+    await fs.writeFile(PROMPTS_FILE, JSON.stringify(promptsData, null, 2));
+  }
+};

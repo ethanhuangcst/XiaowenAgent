@@ -1,0 +1,35 @@
+{
+  "llmProviders": [
+    {
+      "id": "default-openai",
+      "name": "Qwen",
+      "type": "Qwen",
+      "apiKey": "sk-b87bcf7a745644a8bd72b5cea88d6f27",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen-plus",
+      "isActive": true
+    },
+    {
+      "id": "custom-1773026489487",
+      "name": "gpt-5.2-all",
+      "type": "OpenAI",
+      "baseURL": "https://openaiss.com/v1",
+      "apiKey": "sk-VdihYuyJpOjAC8Qv6kmkYVT56mRaG3nkkjHm0lTIxZ38ub3O",
+      "model": "gpt-5.2-all",
+      "isActive": false
+    },
+    {
+      "id": "custom-1773026738921",
+      "name": "Deepseek",
+      "type": "DeepSeek",
+      "baseURL": "https://api.deepseek.com/v1",
+      "apiKey": "sk-366a2d261ad84510a612fddfd47ccc9f",
+      "model": "deepseek-chat",
+      "isActive": false
+    }
+  ],
+  "wechat": {
+    "appId": "wxec217cc904954a60",
+    "appSecret": "7e3b71b94e49187947c33a6646edc615"
+  }
+}

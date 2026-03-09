@@ -3,6 +3,8 @@ import express from "express";
 import { z } from "zod";
 import { createProject, getProject, generateOutline } from "./api/controllers/workflowController.js";
 import { getSettings, updateSettings } from "./api/controllers/settingsController.js";
+import { getPrompts, updatePrompts } from "./api/controllers/promptsController.js";
+import agentRoutes from "./api/routes/agent.js";
 import { generateAllContent } from "./core/content/generator.js";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -35,6 +37,13 @@ export function createServer() {
   // Settings routes
   app.get("/api/settings", getSettings);
   app.post("/api/settings", updateSettings);
+
+  // Prompts routes
+  app.get("/api/prompts", getPrompts);
+  app.post("/api/prompts", updatePrompts);
+
+  // Agent routes
+  app.use("/api/agent", agentRoutes);
 
   // Project workflow routes
   app.post("/api/projects", createProject);

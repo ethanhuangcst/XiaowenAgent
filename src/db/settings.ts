@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CONFIG_FILE = path.join(__dirname, "../../../settings.json");
+const CONFIG_FILE = path.join(__dirname, "../../settings.json");
 
 // Default settings from .env
 const defaultSettings: SystemSettings = {
@@ -31,14 +31,11 @@ let cachedSettings: SystemSettings | null = null;
 
 export const settings = {
   get: async (): Promise<SystemSettings> => {
-    if (cachedSettings) return cachedSettings;
-
     try {
       const data = await fs.readFile(CONFIG_FILE, "utf-8");
       cachedSettings = JSON.parse(data);
       return cachedSettings!;
     } catch (error) {
-      // If file not exists, use defaults and save
       cachedSettings = defaultSettings;
       await settings.save(defaultSettings);
       return defaultSettings;

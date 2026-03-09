@@ -6,10 +6,21 @@
   <title>XiaowenAgent - 内容创作智能体</title>
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     [v-cloak] { display: none; }
     .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
     .fade-enter-from, .fade-leave-to { opacity: 0; }
+    .markdown-content h1 { font-size: 1.5rem; font-weight: bold; margin: 1rem 0 0.5rem; }
+    .markdown-content h2 { font-size: 1.25rem; font-weight: bold; margin: 0.75rem 0 0.5rem; }
+    .markdown-content h3 { font-size: 1.1rem; font-weight: bold; margin: 0.5rem 0 0.25rem; }
+    .markdown-content ul { list-style-type: disc; padding-left: 1.5rem; margin: 0.5rem 0; }
+    .markdown-content ol { list-style-type: decimal; padding-left: 1.5rem; margin: 0.5rem 0; }
+    .markdown-content li { margin: 0.25rem 0; }
+    .markdown-content p { margin: 0.5rem 0; }
+    .markdown-content code { background: #f3f4f6; padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-size: 0.875rem; }
+    .markdown-content pre { background: #f3f4f6; padding: 0.5rem; border-radius: 0.25rem; overflow-x: auto; }
+    .markdown-content blockquote { border-left: 4px solid #e5e7eb; padding-left: 1rem; margin: 0.5rem 0; color: #6b7280; }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen text-gray-800">
@@ -19,9 +30,11 @@
         <h1 class="text-3xl font-bold text-blue-600 mb-2 cursor-pointer" @click="step = 1">🤖 XiaowenAgent</h1>
         <p class="text-gray-600">您的智能内容创作助手</p>
       </div>
-      <button @click="showSettings = !showSettings" class="text-gray-600 hover:text-blue-600">
-        ⚙️ 设置
-      </button>
+      <div class="flex gap-2">
+        <button @click="showSettings = !showSettings" class="text-gray-600 hover:text-blue-600">
+          ⚙️ 设置
+        </button>
+      </div>
     </header>
 
     <!-- Settings Modal -->
@@ -93,47 +106,41 @@
 
     <!-- Step 1: Create Project -->
     <div v-if="step === 1" class="bg-white p-6 rounded-lg shadow-md">
-      <h2 class="text-xl font-semibold mb-4 border-b pb-2">第一步：创建项目</h2>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="md:col-span-2">
-          <label class="block text-sm font-medium mb-1">主题 (Topic)</label>
-          <input v-model="form.topic" type="text" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="例如：AI 时代的个人成长">
-        </div>
-        
+      <h2 class="text-xl font-semibold mb-4 border-b pb-2">第一步：输入大纲和Prompt</h2>
+      
+      <div class="grid grid-cols-1 gap-6">
+        <!-- Outline Input -->
         <div>
-          <label class="block text-sm font-medium mb-1">类型 (Type)</label>
-          <select v-model="form.type" class="w-full p-2 border rounded">
-            <option value="Article">微信公众号文章</option>
-            <option value="VideoPost">视频号图文</option>
-            <option value="Both">Both (联动)</option>
-          </select>
+          <label class="block text-sm font-medium mb-2">📝 大纲内容（Markdown格式）</label>
+          <textarea 
+            v-model="outlineInput" 
+            class="w-full h-96 p-4 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
+            placeholder="粘贴或输入Markdown格式的大纲..."
+          ></textarea>
         </div>
 
+        <!-- Prompt Input -->
         <div>
-          <label class="block text-sm font-medium mb-1">调性 (Tone)</label>
-          <select v-model="form.tone" class="w-full p-2 border rounded">
-            <option value="干货">干货 (实用/专业)</option>
-            <option value="轻松">轻松 (幽默/日常)</option>
-            <option value="故事化">故事化 (情感/叙事)</option>
-            <option value="专业">专业 (学术/深度)</option>
-            <option value="情绪价值">情绪价值 (治愈/励志)</option>
-          </select>
-        </div>
-
-        <div class="md:col-span-2">
-          <label class="block text-sm font-medium mb-1">概要/意图 (Gist) <span class="text-gray-400 text-xs">(选填)</span></label>
-          <textarea v-model="form.gist" rows="3" class="w-full p-2 border rounded" placeholder="简要描述核心观点或参考链接..."></textarea>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium mb-1">字数预期</label>
-          <input v-model.number="form.wordCount" type="number" class="w-full p-2 border rounded">
+          <label class="block text-sm font-medium mb-2">🤖 生成内容的Prompt</label>
+          <textarea 
+            v-model="promptInput" 
+            class="w-full h-64 p-4 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
+            placeholder="输入生成内容的Prompt..."
+          ></textarea>
+          <p class="text-xs text-gray-500 mt-1">可用变量: {{topic}}, {{tone}}, {{gist}}, {{tags}}, {{count}}</p>
         </div>
       </div>
 
       <div class="mt-6 flex justify-end">
-        <button @click="createProject" :disabled="loading" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50 transition">
-          {{ loading ? '创建中...' : '下一步：生成大纲' }}
+        <button @click="createProjectWithOutline" :disabled="loading" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          <span v-if="loading" class="flex items-center">
+            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            正在生成文案...
+          </span>
+          <span v-else>创建文案 →</span>
         </button>
       </div>
     </div>
@@ -141,14 +148,14 @@
     <!-- Step 2: Outline Preview -->
     <div v-else-if="step === 2" class="bg-white p-6 rounded-lg shadow-md">
       <div class="flex justify-between items-center mb-4 border-b pb-2">
-        <h2 class="text-xl font-semibold">第二步：大纲确认</h2>
+        <h2 class="text-xl font-semibold">第二步：文案确认</h2>
         <span class="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">{{ project.topic }}</span>
       </div>
 
       <!-- Model Selection for Generation -->
       <div class="mb-4 bg-gray-50 p-3 rounded flex items-center justify-between">
         <span class="text-sm font-medium text-gray-700">使用模型生成:</span>
-        <select v-model="selectedProviderId" class="border rounded p-1 text-sm w-64">
+        <select v-model="selectedProviderId" class="border rounded p-1 text-sm w-64 h-10">
           <option v-for="p in settings.llmProviders" :key="p.id" :value="p.id">
             {{ p.name }} ({{ p.model }})
           </option>
@@ -157,29 +164,73 @@
 
       <div v-if="loading" class="text-center py-12">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p class="text-gray-500">正在调用 LLM 生成大纲，请稍候...</p>
+        <p class="text-gray-500">正在优化文案，请稍候...</p>
       </div>
 
-      <div v-else-if="posts.length > 0">
-        <div v-for="(post, idx) in posts" :key="post.id" class="mb-6 p-4 border rounded bg-gray-50">
-          <div class="flex justify-between mb-2">
-            <h3 class="font-bold text-lg">{{ post.platform === 'WeChat_OA' ? '公众号文章' : '视频号图文' }}</h3>
-            <span class="text-xs text-gray-500">ID: {{ post.id }}</span>
-          </div>
+      <div v-else>
+        <!-- Outline Textarea -->
+        <div class="mb-6">
+          <label class="block text-sm font-medium mb-2">📝 文案大纲（可编辑）</label>
+          <textarea 
+            v-model="outlineMarkdown" 
+            class="w-full h-96 p-4 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
+            placeholder="优化后的文案大纲将在这里显示..."
+          ></textarea>
+        </div>
+
+        <!-- Project Summary -->
+        <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+          <h3 class="font-semibold mb-4 text-gray-700">📋 文案概要</h3>
           
-          <div v-if="post.outline">
-            <h4 class="font-medium text-blue-700 mb-2">{{ post.outline.title }}</h4>
-            <ul class="list-disc pl-5 space-y-1">
-              <li v-for="(item, i) in post.outline.structure" :key="i" class="text-gray-700">{{ item }}</li>
-            </ul>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Topic -->
+            <div>
+              <label class="block text-sm font-medium mb-1">主题</label>
+              <input v-model="projectSummary.topic" type="text" class="w-full p-2 border rounded h-10" placeholder="自动总结的主题">
+            </div>
+            
+            <!-- Type -->
+            <div>
+              <label class="block text-sm font-medium mb-1">类型</label>
+              <select v-model="projectSummary.type" class="w-full p-2 border rounded h-10">
+                <option value="Article">公众号文章</option>
+                <option value="VideoPost">视频号图文</option>
+                <option value="Both">Both</option>
+              </select>
+            </div>
+            
+            <!-- Count -->
+            <div>
+              <label class="block text-sm font-medium mb-1">篇数</label>
+              <input v-model.number="projectSummary.count" type="number" class="w-full p-2 border rounded h-10 bg-gray-100" readonly>
+              <p class="text-xs text-gray-500 mt-1">{{ projectSummary.count === 1 ? '单篇' : '系列文章' }}</p>
+            </div>
+            
+            <!-- Start Date -->
+            <div>
+              <label class="block text-sm font-medium mb-1">发布日期</label>
+              <input v-model="projectSummary.startDate" type="date" class="w-full p-2 border rounded h-10">
+            </div>
+            
+            <!-- Frequency -->
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium mb-2">发布频率</label>
+              <div class="flex flex-wrap gap-2">
+                <label v-for="day in weekdays" :key="day.value" class="cursor-pointer">
+                  <input type="checkbox" :value="day.value" v-model="projectSummary.weekdays" class="hidden peer">
+                  <span class="inline-block px-4 py-2 border rounded-lg peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 hover:bg-gray-50 transition">
+                    {{ day.label }}
+                  </span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="mt-6 flex justify-between">
-          <button @click="step = 1" class="text-gray-600 hover:text-gray-800">返回修改</button>
+        <div class="mt-6 flex justify-end border-t pt-4">
           <div class="space-x-2">
-            <button @click="generateOutline" class="border border-gray-300 px-4 py-2 rounded hover:bg-gray-50">重新生成</button>
-            <button @click="nextStep" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">下一步：生成正文 (开发中)</button>
+            <button @click="regenerateOutline" class="border border-gray-300 px-4 py-2 rounded hover:bg-gray-50">🔄 重新生成</button>
+            <button @click="nextStep" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">下一步 →</button>
           </div>
         </div>
       </div>
@@ -194,36 +245,167 @@
   </div>
 
   <script>
-    const { createApp, reactive, ref, onMounted } = Vue;
+    const { createApp, reactive, ref, onMounted, computed } = Vue;
 
     createApp({
       setup() {
         const step = ref(1);
         const loading = ref(false);
         const showSettings = ref(false);
+        const outlineInput = ref(`# 软件开发SDD时代与高龄程序员的职业逆袭（系列）
+
+## 第1篇：《软件开发SDD时代与高龄程序员的职业逆袭（1）- 先说结论》
+
+### Key Message: 软件行业的未来：码农被淘汰，懂软件匠艺+工程实践+产品思维+SDD的资深程序员，使用SDD指挥AI做开发，一个人=一个优秀团队
+
+### 状态: 草稿
+
+---
+
+## 第2篇：《软件开发SDD时代与高龄程序员的职业逆袭（2）- 500小时高强度SDD的心得》
+
+### Key Message: 90%的浪费不是技术造成，而是80年代起就已经知道的问题：缺乏软件匠艺，不遵守工程实践，缺乏产品意识
+
+### 状态: 草稿
+
+---
+
+## 第3篇：《软件开发SDD时代与高龄程序员的职业逆袭（3）- 第一个坑：用人类自然语言写需求》
+
+### Key Message: 开始口述需求开发飞起，然后改bug怀疑人生 - 前20年没人重视的BDD和ATDD帮你去掉90%的需求误解
+
+### 状态: 草稿
+
+---
+
+## 第4篇：《软件开发SDD时代与高龄程序员的职业逆袭（4）- 第二个坑：不做计划》
+
+### Key Message: 开发 = 编程？AI就是快？5分钟的舒爽让我用一个通宵来补偿
+
+### 状态: 草稿
+
+---
+
+## 第5篇：《软件开发SDD时代与高龄程序员的职业逆袭（5）- 第三个坑：多个功能齐头并进》
+
+### Key Message: 要想开发A功能，B功能必须先完成，然后发现C是依赖项...两个小时之后所有的代码都是半成品，彻底失去控制
+
+### 状态: 草稿
+
+---`);
+        const promptInput = ref(`# S - Situation
+## 我是 Ethan Huang，国际顶尖敏捷专家
+### 精通：Scrum, XP, TDD, ATDD, BDD等敏捷实践
+### 研究：SDD (Spec Driven Development)
+### 经历：500小时AI辅助开发实践，踩坑无数
+
+## 行业背景
+### 软件行业成熟度低，996堆人交付
+### 35岁+程序员面临职业危机
+### AI崛起带来全新岗位和技能要求
+
+## 目标
+### 创作20篇系列文章：《软件开发SDD时代与高龄程序员的职业逆袭》
+### 目的：获得阅读、点赞、关注，转化为课程报名
+
+# T - Task
+## 为选题"{{topic}}"设计{{count}}篇系列大纲
+
+### 调性：{{tone}}
+### 概要：{{gist}}
+### 亮点：{{tags}}
+
+## 输出要求
+1. 系列主题：《主题（系列）》
+2. 子标题：《主题（N）- 重点》
+3. Key Message：一句话核心观点，直击痛点
+4. 钩子：开头3秒吸引技巧（提问式或反差式）
+5. 标签：2-3个热门标签
+6. 关键词：3-5个核心关键词
+
+## 成功标准
+- 标题：简短、情绪化、吸引眼球
+- Key Message：一句话，直击痛点
+- 钩子：与内容高度相关，引发好奇，但是必须基于Ethan500小时SDD实践的主线
+- 标签：热门、相关、便于搜索
+
+# A - Action Role
+## 你是Ethan本人，非常聚焦Ethan想要达成的目标，
+## 同时也是：
+### 微信视频号文案达人，非常了解视频号爆火文案的逻辑
+### 微信公众号文案达人，非常了解微信公众号爆火文案的逻辑
+### 你是SDD和AI辅助软件开发的领域专家
+### AI编程工具，例如 Claude Code, Trae 的应用专家
+### 敏捷，软件工程，软件匠艺，Scrum，TDD，BDD，ATDD等敏捷实践的领域专家
+### 你是中文语言达人，特别擅长用幽默、简洁的语言清晰的传递 key messages
+
+# R - Rule
+## 输出格式：JSON
+## 文案格式：Markdown
+## 优先使用：#/##/###分层结构
+## 避免：**xyz**格式
+
+# 示例（成功案例）
+{
+  "seriesTitle": "软件开发SDD时代与高龄程序员的职业逆袭（系列）",
+  "posts": [
+    {
+      "index": 1,
+      "title": "《软件开发SDD时代与高龄程序员的职业逆袭（1）- 先说结论》",
+      "keyMessage": "软件行业的未来：码农被淘汰，懂软件匠艺+工程实践+产品思维+SDD的资深程序员，使用SDD指挥AI做开发，一个人=一个优秀团队",
+      "hook": "你是35岁以上的程序员吗？你担心被优化吗？我今年47岁，我告诉你我们逆袭的时候到了！",
+      "tags": ["#SDD", "#程序员中年危机"],
+      "keywords": ["AI替代", "职业危机", "35岁"]
+    }
+  ]
+}`);
         const project = ref(null);
         const posts = ref([]);
         const toast = reactive({ show: false, message: '' });
         const selectedProviderId = ref('');
+        const weekdays = [
+          { label: '周一', value: 1 },
+          { label: '周二', value: 2 },
+          { label: '周三', value: 3 },
+          { label: '周四', value: 4 },
+          { label: '周五', value: 5 },
+          { label: '周六', value: 6 },
+          { label: '周日', value: 0 }
+        ];
+        const projectSummary = reactive({
+          topic: '',
+          type: 'Article',
+          count: 1,
+          startDate: '',
+          weekdays: []
+        });
 
         const settings = reactive({
           llmProviders: [],
           wechat: { appId: '', appSecret: '' }
         });
 
-        const form = reactive({
-          topic: '',
-          type: 'Article',
-          mode: 'Single',
-          tone: '干货',
-          wordCount: 1500,
-          gist: ''
-        });
-
         const showToast = (msg) => {
           toast.message = msg;
           toast.show = true;
           setTimeout(() => toast.show = false, 3000);
+        };
+
+        const parseToneInput = () => {
+          const input = toneInput.value;
+          const tags = input
+            .split(/[\s,，]+/)
+            .map(t => t.trim())
+            .filter(t => t.length > 0)
+            .map(t => t.startsWith('#') ? t : '#' + t);
+          form.tags = [...new Set(tags)];
+          form.tone = form.tags.join(' ');
+        };
+
+        const removeTag = (idx) => {
+          form.tags.splice(idx, 1);
+          form.tone = form.tags.join(' ');
+          toneInput.value = form.tags.join(' ');
         };
 
         const loadSettings = async () => {
@@ -308,22 +490,111 @@
           }
         };
 
-        const generateOutline = async () => {
+        const createProjectWithOutline = async () => {
+          if (!outlineInput.value.trim()) {
+            showToast('请输入大纲内容');
+            return;
+          }
+          
+          loading.value = true;
+          try {
+            // Create project and optimize outline
+            const res = await fetch('/api/projects', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                topic: '待优化',
+                type: 'Article',
+                mode: 'Single',
+                seriesCount: 1,
+                tone: '',
+                tags: [],
+                wordCount: 1500,
+                gist: '',
+                prompt: promptInput.value,
+                outline: outlineInput.value,
+                providerId: selectedProviderId.value
+              })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+              project.value = data.project;
+              posts.value = data.posts || [];
+              
+              // Update project summary
+              projectSummary.topic = data.project.topic;
+              projectSummary.type = data.project.type;
+              projectSummary.count = data.posts?.length || 1;
+              projectSummary.startDate = new Date().toISOString().split('T')[0];
+              
+              step.value = 2;
+              showToast('文案创建成功');
+            } else {
+              showToast(data.error || '创建失败');
+            }
+          } catch (e) {
+            showToast('网络错误');
+          } finally {
+            loading.value = false;
+          }
+        };
+
+        const regenerateOutline = async () => {
           if (!project.value) return;
           
           loading.value = true;
-          posts.value = []; 
-          
           try {
             const res = await fetch(`/api/projects/${project.value.id}/outline`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ providerId: selectedProviderId.value })
+              body: JSON.stringify({
+                providerId: selectedProviderId.value,
+                currentOutline: outlineMarkdown.value
+              })
             });
             const data = await res.json();
             
             if (res.ok) {
               posts.value = data.posts;
+              projectSummary.topic = data.project.topic;
+              projectSummary.count = data.posts?.length || 1;
+              showToast('文案已重新生成');
+            } else {
+              showToast(data.error || '重新生成失败');
+            }
+          } catch (e) {
+            showToast('网络错误');
+          } finally {
+            loading.value = false;
+          }
+        };
+
+        const generateOutline = async () => {
+          if (!project.value) return;
+          
+          loading.value = true;
+          
+          try {
+            // Parse current markdown content from textarea
+            let editedPosts = null;
+            if (posts.value.length > 0) {
+              editedPosts = parseMarkdownToPosts(outlineMarkdown.value);
+            }
+            
+            const res = await fetch(`/api/projects/${project.value.id}/outline`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                providerId: selectedProviderId.value,
+                existingPosts: editedPosts
+              })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+              posts.value = data.posts;
+              showToast(posts.value.length > 0 ? '大纲已更新' : '大纲生成成功');
             } else {
               showToast(data.error || '生成大纲失败');
             }
@@ -334,8 +605,174 @@
           }
         };
 
+        const parseMarkdownToPosts = (markdown) => {
+          const lines = markdown.split('\n');
+          const parsedPosts = [];
+          let currentPost = null;
+          let seriesTitle = '';
+          
+          lines.forEach(line => {
+            if (line.startsWith('# ') && !line.includes('第')) {
+              seriesTitle = line.substring(2).trim();
+            } else if (line.startsWith('## 第') && line.includes('篇：')) {
+              if (currentPost) {
+                parsedPosts.push(currentPost);
+              }
+              const titleMatch = line.match(/第\d+篇：(.+)/);
+              currentPost = {
+                outline: {
+                  seriesTitle: seriesTitle,
+                  title: titleMatch ? titleMatch[1].trim() : '',
+                  keyMessage: '',
+                  hook: '',
+                  tags: [],
+                  keywords: [],
+                  status: '草稿'
+                }
+              };
+            } else if (line.startsWith('### Key Message:') && currentPost) {
+              currentPost.outline.keyMessage = line.replace('### Key Message:', '').trim();
+            } else if (line.startsWith('### 钩子:') && currentPost) {
+              currentPost.outline.hook = line.replace('### 钩子:', '').trim();
+            } else if (line.startsWith('### 标签:') && currentPost) {
+              const tags = line.replace('### 标签:', '').trim().split(/\s+/).filter(t => t);
+              currentPost.outline.tags = tags;
+            } else if (line.startsWith('### 关键词:') && currentPost) {
+              const keywords = line.replace('### 关键词:', '').trim().split(/[、,，]/).filter(k => k);
+              currentPost.outline.keywords = keywords;
+            } else if (line.startsWith('### 状态:') && currentPost) {
+              currentPost.outline.status = line.replace('### 状态:', '').trim();
+            }
+          });
+          
+          if (currentPost) {
+            parsedPosts.push(currentPost);
+          }
+          
+          return parsedPosts;
+        };
+
         const nextStep = () => {
           showToast('生成正文功能正在开发中...');
+        };
+
+        const goBackToStep1 = () => {
+          step.value = 1;
+          posts.value = [];
+          loading.value = false;
+        };
+
+        const renderMarkdown = (text) => {
+          if (!text) return '';
+          return marked.parse(text);
+        };
+
+        const groupedPosts = computed(() => {
+          const groups = {};
+          posts.value.forEach(post => {
+            const platform = post.platform;
+            if (!groups[platform]) {
+              groups[platform] = {
+                platform: platform,
+                platformName: platform === 'WeChat_OA' ? '公众号文章' : '视频号图文',
+                posts: []
+              };
+            }
+            groups[platform].posts.push(post);
+          });
+          
+          return Object.values(groups).sort((a, b) => {
+            if (a.platform === 'WeChat_OA') return -1;
+            if (b.platform === 'WeChat_OA') return 1;
+            return 0;
+          });
+        });
+
+        const editPost = (post) => {
+          showToast('编辑功能开发中...');
+        };
+
+        const outlineMarkdown = computed({
+          get: () => {
+            if (posts.value.length === 0) return '';
+            
+            const seriesTitle = posts.value[0]?.outline?.seriesTitle || '';
+            let markdown = seriesTitle ? `# ${seriesTitle}\n\n` : '';
+            
+            posts.value.forEach((post, idx) => {
+              const outline = post.outline;
+              if (!outline) return;
+              
+              markdown += `## 第${idx + 1}篇：${outline.title}\n\n`;
+              markdown += `### Key Message: ${outline.keyMessage}\n\n`;
+              markdown += `### 钩子: ${outline.hook}\n\n`;
+              
+              if (outline.tags && outline.tags.length > 0) {
+                markdown += `### 标签: ${outline.tags.join(' ')}\n\n`;
+              }
+              
+              if (outline.keywords && outline.keywords.length > 0) {
+                markdown += `### 关键词: ${outline.keywords.join('、')}\n\n`;
+              }
+              
+              markdown += `### 状态: ${outline.status || '草稿'}\n\n`;
+              markdown += `---\n\n`;
+            });
+            
+            return markdown;
+          },
+          set: (value) => {
+            const lines = value.split('\n');
+            let currentPostIndex = -1;
+            
+            lines.forEach(line => {
+              if (line.startsWith('## 第') && line.includes('篇：')) {
+                currentPostIndex++;
+                const titleMatch = line.match(/第\d+篇：(.+)/);
+                if (titleMatch && posts.value[currentPostIndex]) {
+                  posts.value[currentPostIndex].outline.title = titleMatch[1].trim();
+                }
+              } else if (line.startsWith('### Key Message:') && currentPostIndex >= 0) {
+                const keyMessage = line.replace('### Key Message:', '').trim();
+                if (posts.value[currentPostIndex]) {
+                  posts.value[currentPostIndex].outline.keyMessage = keyMessage;
+                }
+              } else if (line.startsWith('### 钩子:') && currentPostIndex >= 0) {
+                const hook = line.replace('### 钩子:', '').trim();
+                if (posts.value[currentPostIndex]) {
+                  posts.value[currentPostIndex].outline.hook = hook;
+                }
+              } else if (line.startsWith('### 标签:') && currentPostIndex >= 0) {
+                const tags = line.replace('### 标签:', '').trim().split(/\s+/).filter(t => t);
+                if (posts.value[currentPostIndex]) {
+                  posts.value[currentPostIndex].outline.tags = tags;
+                }
+              } else if (line.startsWith('### 关键词:') && currentPostIndex >= 0) {
+                const keywords = line.replace('### 关键词:', '').trim().split(/[、,，]/).filter(k => k);
+                if (posts.value[currentPostIndex]) {
+                  posts.value[currentPostIndex].outline.keywords = keywords;
+                }
+              } else if (line.startsWith('### 状态:') && currentPostIndex >= 0) {
+                const status = line.replace('### 状态:', '').trim();
+                if (posts.value[currentPostIndex]) {
+                  posts.value[currentPostIndex].outline.status = status;
+                }
+              }
+            });
+          }
+        });
+
+        const updateOutlineFromMarkdown = () => {
+          // This is handled by the computed setter
+        };
+
+        const copyOutline = () => {
+          const text = outlineMarkdown.value;
+          navigator.clipboard.writeText(text).then(() => {
+            showToast('大纲已复制到剪贴板');
+          }).catch(() => {
+            showToast('复制失败，请手动复制');
+          });
         };
 
         onMounted(() => {
@@ -346,19 +783,27 @@
           step,
           loading,
           showSettings,
-          form,
+          outlineInput,
+          promptInput,
           project,
           posts,
           toast,
           settings,
           selectedProviderId,
-          createProject,
-          generateOutline,
+          weekdays,
+          projectSummary,
+          outlineMarkdown,
+          createProjectWithOutline,
+          regenerateOutline,
           nextStep,
+          goBackToStep1,
           saveSettings,
           addProvider,
           removeProvider,
-          setActiveProvider
+          setActiveProvider,
+          copyOutline,
+          updateOutlineFromMarkdown,
+          parseMarkdownToPosts
         };
       }
     }).mount('#app');
