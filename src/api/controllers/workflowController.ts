@@ -48,6 +48,7 @@ export const getProject = async (req: Request, res: Response) => {
 
 export const generateOutline = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { providerId } = req.body;
   const project = await db.project.findById(id);
   
   if (!project) {
@@ -60,8 +61,8 @@ export const generateOutline = async (req: Request, res: Response) => {
     const prompt = buildOutlinePrompt(project as any, platform);
     const system = "你是一个专业的内容策划专家。请直接输出 JSON。";
 
-    // Call real LLM
-    const outline = await generateJson<{ title: string; structure: string[] }>(system, prompt);
+    // Call real LLM with selected provider
+    const outline = await generateJson<{ title: string; structure: string[] }>(system, prompt, providerId);
 
     // Update project status
     await db.project.update(id, { status: "Outline" });

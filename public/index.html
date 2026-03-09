@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XiaowenAgent - 内容创作智能体</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    [v-cloak] { display: none; }
+    .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800">
+  <div id="app" v-cloak class="container mx-auto px-4 py-8 max-w-4xl">
+    <header class="mb-8 flex justify-between items-center">
+      <div>
+        <h1 class="text-3xl font-bold text-blue-600 mb-2 cursor-pointer" @click="step = 1">🤖 XiaowenAgent</h1>
+        <p class="text-gray-600">您的智能内容创作助手</p>
+      </div>
+      <button @click="showSettings = !showSettings" class="text-gray-600 hover:text-blue-600">
+        ⚙️ 设置
+      </button>
+    </header>
+
+    <!-- Settings Modal -->
+    <div v-if="showSettings" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white p-6 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">系统设置</h2>
+        
+        <!-- LLM Providers -->
+        <div class="mb-6">
+          <h3 class="font-semibold mb-2 text-gray-700">模型服务商 (LLM Providers)</h3>
+          <div v-for="(provider, idx) in settings.llmProviders" :key="idx" class="border p-4 rounded mb-2 relative">
+            <button @click="removeProvider(idx)" class="absolute top-2 right-2 text-red-500 text-sm hover:underline" v-if="settings.llmProviders.length > 1">删除</button>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs text-gray-500">名称</label>
+                <input v-model="provider.name" class="w-full border p-1 rounded text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500">类型</label>
+                <select v-model="provider.type" class="w-full border p-1 rounded text-sm">
+                  <option value="OpenAI">OpenAI</option>
+                  <option value="Qwen">Qwen (通义千问)</option>
+                  <option value="DeepSeek">DeepSeek</option>
+                  <option value="Custom">Custom</option>
+                </select>
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500">Base URL</label>
+                <input v-model="provider.baseURL" class="w-full border p-1 rounded text-sm" placeholder="https://api.openai.com/v1">
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500">API Key</label>
+                <input v-model="provider.apiKey" type="password" class="w-full border p-1 rounded text-sm" placeholder="sk-...">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500">Model Name</label>
+                <input v-model="provider.model" class="w-full border p-1 rounded text-sm" placeholder="gpt-4">
+              </div>
+              <div class="flex items-center mt-4">
+                <input type="checkbox" v-model="provider.isActive" @change="setActiveProvider(idx)" :id="'active-'+idx" class="mr-2">
+                <label :for="'active-'+idx" class="text-sm">设为默认</label>
+              </div>
+            </div>
+          </div>
+          <button @click="addProvider" class="text-blue-600 text-sm hover:underline">+ 添加服务商</button>
+        </div>
+
+        <!-- WeChat Config -->
+        <div class="mb-6">
+          <h3 class="font-semibold mb-2 text-gray-700">微信公众号配置</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm">AppID</label>
+              <input v-model="settings.wechat.appId" class="w-full border p-2 rounded">
+            </div>
+            <div>
+              <label class="block text-sm">AppSecret</label>
+              <input v-model="settings.wechat.appSecret" type="password" class="w-full border p-2 rounded">
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end space-x-2 mt-4 border-t pt-4">
+          <button @click="showSettings = false" class="px-4 py-2 text-gray-600">取消</button>
+          <button @click="saveSettings" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">保存配置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 1: Create Project -->
+    <div v-if="step === 1" class="bg-white p-6 rounded-lg shadow-md">
+      <h2 class="text-xl font-semibold mb-4 border-b pb-2">第一步：创建项目</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">主题 (Topic)</label>
+          <input v-model="form.topic" type="text" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="例如：AI 时代的个人成长">
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium mb-1">类型 (Type)</label>
+          <select v-model="form.type" class="w-full p-2 border rounded">
+            <option value="Article">微信公众号文章</option>
+            <option value="VideoPost">视频号图文</option>
+            <option value="Both">Both (联动)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">调性 (Tone)</label>
+          <select v-model="form.tone" class="w-full p-2 border rounded">
+            <option value="干货">干货 (实用/专业)</option>
+            <option value="轻松">轻松 (幽默/日常)</option>
+            <option value="故事化">故事化 (情感/叙事)</option>
+            <option value="专业">专业 (学术/深度)</option>
+            <option value="情绪价值">情绪价值 (治愈/励志)</option>
+          </select>
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">概要/意图 (Gist) <span class="text-gray-400 text-xs">(选填)</span></label>
+          <textarea v-model="form.gist" rows="3" class="w-full p-2 border rounded" placeholder="简要描述核心观点或参考链接..."></textarea>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">字数预期</label>
+          <input v-model.number="form.wordCount" type="number" class="w-full p-2 border rounded">
+        </div>
+      </div>
+
+      <div class="mt-6 flex justify-end">
+        <button @click="createProject" :disabled="loading" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50 transition">
+          {{ loading ? '创建中...' : '下一步：生成大纲' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Outline Preview -->
+    <div v-else-if="step === 2" class="bg-white p-6 rounded-lg shadow-md">
+      <div class="flex justify-between items-center mb-4 border-b pb-2">
+        <h2 class="text-xl font-semibold">第二步：大纲确认</h2>
+        <span class="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">{{ project.topic }}</span>
+      </div>
+
+      <!-- Model Selection for Generation -->
+      <div class="mb-4 bg-gray-50 p-3 rounded flex items-center justify-between">
+        <span class="text-sm font-medium text-gray-700">使用模型生成:</span>
+        <select v-model="selectedProviderId" class="border rounded p-1 text-sm w-64">
+          <option v-for="p in settings.llmProviders" :key="p.id" :value="p.id">
+            {{ p.name }} ({{ p.model }})
+          </option>
+        </select>
+      </div>
+
+      <div v-if="loading" class="text-center py-12">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p class="text-gray-500">正在调用 LLM 生成大纲，请稍候...</p>
+      </div>
+
+      <div v-else-if="posts.length > 0">
+        <div v-for="(post, idx) in posts" :key="post.id" class="mb-6 p-4 border rounded bg-gray-50">
+          <div class="flex justify-between mb-2">
+            <h3 class="font-bold text-lg">{{ post.platform === 'WeChat_OA' ? '公众号文章' : '视频号图文' }}</h3>
+            <span class="text-xs text-gray-500">ID: {{ post.id }}</span>
+          </div>
+          
+          <div v-if="post.outline">
+            <h4 class="font-medium text-blue-700 mb-2">{{ post.outline.title }}</h4>
+            <ul class="list-disc pl-5 space-y-1">
+              <li v-for="(item, i) in post.outline.structure" :key="i" class="text-gray-700">{{ item }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-between">
+          <button @click="step = 1" class="text-gray-600 hover:text-gray-800">返回修改</button>
+          <div class="space-x-2">
+            <button @click="generateOutline" class="border border-gray-300 px-4 py-2 rounded hover:bg-gray-50">重新生成</button>
+            <button @click="nextStep" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">下一步：生成正文 (开发中)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <transition name="fade">
+      <div v-if="toast.show" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-lg z-50">
+        {{ toast.message }}
+      </div>
+    </transition>
+  </div>
+
+  <script>
+    const { createApp, reactive, ref, onMounted } = Vue;
+
+    createApp({
+      setup() {
+        const step = ref(1);
+        const loading = ref(false);
+        const showSettings = ref(false);
+        const project = ref(null);
+        const posts = ref([]);
+        const toast = reactive({ show: false, message: '' });
+        const selectedProviderId = ref('');
+
+        const settings = reactive({
+          llmProviders: [],
+          wechat: { appId: '', appSecret: '' }
+        });
+
+        const form = reactive({
+          topic: '',
+          type: 'Article',
+          mode: 'Single',
+          tone: '干货',
+          wordCount: 1500,
+          gist: ''
+        });
+
+        const showToast = (msg) => {
+          toast.message = msg;
+          toast.show = true;
+          setTimeout(() => toast.show = false, 3000);
+        };
+
+        const loadSettings = async () => {
+          try {
+            const res = await fetch('/api/settings');
+            const data = await res.json();
+            settings.llmProviders = data.llmProviders || [];
+            settings.wechat = data.wechat || { appId: '', appSecret: '' };
+            
+            // Set default selected provider
+            const active = settings.llmProviders.find(p => p.isActive);
+            if (active) selectedProviderId.value = active.id;
+            else if (settings.llmProviders.length > 0) selectedProviderId.value = settings.llmProviders[0].id;
+          } catch (e) {
+            console.error('Failed to load settings', e);
+          }
+        };
+
+        const saveSettings = async () => {
+          try {
+            const res = await fetch('/api/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(settings)
+            });
+            if (res.ok) {
+              showToast('设置已保存');
+              showSettings.value = false;
+            } else {
+              showToast('保存失败');
+            }
+          } catch (e) {
+            showToast('保存错误');
+          }
+        };
+
+        const addProvider = () => {
+          settings.llmProviders.push({
+            id: 'custom-' + Date.now(),
+            name: 'New Provider',
+            type: 'Custom',
+            baseURL: '',
+            apiKey: '',
+            model: '',
+            isActive: false
+          });
+        };
+
+        const removeProvider = (idx) => {
+          settings.llmProviders.splice(idx, 1);
+        };
+
+        const setActiveProvider = (idx) => {
+          settings.llmProviders.forEach((p, i) => {
+            p.isActive = i === idx;
+          });
+        };
+
+        const createProject = async () => {
+          if (!form.topic) return showToast('请输入主题');
+          
+          loading.value = true;
+          try {
+            const res = await fetch('/api/projects', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(form)
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+              project.value = data;
+              step.value = 2;
+              generateOutline();
+            } else {
+              showToast(data.error || '创建失败');
+              loading.value = false;
+            }
+          } catch (e) {
+            showToast('网络错误');
+            loading.value = false;
+          }
+        };
+
+        const generateOutline = async () => {
+          if (!project.value) return;
+          
+          loading.value = true;
+          posts.value = []; 
+          
+          try {
+            const res = await fetch(`/api/projects/${project.value.id}/outline`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ providerId: selectedProviderId.value })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+              posts.value = data.posts;
+            } else {
+              showToast(data.error || '生成大纲失败');
+            }
+          } catch (e) {
+            showToast('网络错误');
+          } finally {
+            loading.value = false;
+          }
+        };
+
+        const nextStep = () => {
+          showToast('生成正文功能正在开发中...');
+        };
+
+        onMounted(() => {
+          loadSettings();
+        });
+
+        return {
+          step,
+          loading,
+          showSettings,
+          form,
+          project,
+          posts,
+          toast,
+          settings,
+          selectedProviderId,
+          createProject,
+          generateOutline,
+          nextStep,
+          saveSettings,
+          addProvider,
+          removeProvider,
+          setActiveProvider
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

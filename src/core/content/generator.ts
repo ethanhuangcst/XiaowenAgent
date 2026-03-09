@@ -23,10 +23,10 @@ const videoSchema = z.object({
 const systemPrompt =
   "你是一个内容增长智能体，擅长基于业务目标输出可发布、可执行、可转化的内容。输出必须是合法 JSON。";
 
-export async function generateAllContent(input: GenerateInput): Promise<GeneratedContent> {
+export async function generateAllContent(input: GenerateInput, providerId?: string): Promise<GeneratedContent> {
   const [wechatRaw, videoRaw] = await Promise.all([
-    generateJson<unknown>(systemPrompt, buildWechatPrompt(input)),
-    generateJson<unknown>(systemPrompt, buildVideoPostPrompt(input))
+    generateJson<unknown>(systemPrompt, buildWechatPrompt(input), providerId),
+    generateJson<unknown>(systemPrompt, buildVideoPostPrompt(input), providerId)
   ]);
 
   return {

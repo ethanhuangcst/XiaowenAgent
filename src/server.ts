@@ -2,7 +2,13 @@ import cors from "cors";
 import express from "express";
 import { z } from "zod";
 import { createProject, getProject, generateOutline } from "./api/controllers/workflowController.js";
+import { getSettings, updateSettings } from "./api/controllers/settingsController.js";
 import { generateAllContent } from "./core/content/generator.js";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const requestSchema = z.object({
   topic: z.string().min(2),
@@ -18,10 +24,17 @@ export function createServer() {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "1mb" }));
+  
+  // Serve static frontend
+  app.use(express.static(path.join(__dirname, "../public")));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
+
+  // Settings routes
+  app.get("/api/settings", getSettings);
+  app.post("/api/settings", updateSettings);
 
   // Project workflow routes
   app.post("/api/projects", createProject);

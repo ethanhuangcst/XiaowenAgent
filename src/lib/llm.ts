@@ -1,14 +1,22 @@
 import OpenAI from "openai";
-import { env } from "../config/index.js";
+import { settings } from "../db/settings.js";
 
-const client = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-  baseURL: env.OPENAI_BASE_URL
-});
+export async function generateJson<T>(system: string, user: string, providerId?: string): Promise<T> {
+  let provider;
+  if (providerId) {
+    provider = await settings.getProviderById(providerId);
+  }
+  if (!provider) {
+    provider = await settings.getActiveProvider();
+  }
 
-export async function generateJson<T>(system: string, user: string): Promise<T> {
+  const client = new OpenAI({
+    apiKey: provider.apiKey,
+    baseURL: provider.baseURL
+  });
+
   const completion = await client.chat.completions.create({
-    model: env.OPENAI_MODEL,
+    model: provider.model,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user }
