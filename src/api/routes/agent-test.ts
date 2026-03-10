@@ -151,7 +151,7 @@ router.post('/chat', async (req, res) => {
   }
   
   try {
-    const { message, context } = req.body;
+    const { message, context, currentStep, systemHint } = req.body;
     
     if (!message) {
       res.json({
@@ -161,7 +161,7 @@ router.post('/chat', async (req, res) => {
       return;
     }
     
-    const response = await agentInstance.chat(message, context);
+    const response = await agentInstance.chat(message, context, currentStep, systemHint);
     
     res.json({
       success: true,

@@ -457,7 +457,7 @@ export class XiaowenAgent {
     outline?: string;
     requirements?: string;
     optimizedOutline?: string;
-  }): Promise<string> {
+  }, currentStep?: number, systemHint?: string): Promise<string> {
     console.log('💬 开始对话...');
     
     // 检查当前状态，如果不是IDLE，先重置
@@ -486,19 +486,13 @@ export class XiaowenAgent {
 输入大纲：${context?.outline || '无'}
 
 优化要求：${context?.requirements || '无'}
-
 优化后的大纲：${context?.optimizedOutline || '无'}
-
 用户反馈：${message}
+当前步骤信息：${systemHint || '无'}
 
-请根据用户的反馈，优化大纲或提供建议。
+请根据用户的反馈，优化大纲或提供建议。如果用户反馈是关于大纲优化的，请重新优化大纲。
 
-重要规则：
-1. 如果用户反馈是关于大纲优化的，请返回完整的大纲（包含Key Message、Hook、Tags）
-2. 保持大纲的Markdown格式（# 标题，## 子标题等）
-3. 确保每篇内容都包含：Key Message、Hook、Tags
-4. 如果用户要求添加新内容（如"下期预告"），请保持原有格式并添加新内容
-5. 不要删除或省略任何必需的字段（Key Message、Hook、Tags）`;
+`;
 
     try {
       this.stateMachine.transition('EXECUTING', '调用LLM');

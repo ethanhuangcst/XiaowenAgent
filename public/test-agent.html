@@ -423,6 +423,7 @@
 
         async function startAgent() {
             try {
+                setLoading(true);
                 log('启动 Agent...');
                 
                 const response = await fetch('/api/agent-test/start', {
@@ -437,17 +438,24 @@
                 updateStatus(data);
                 
                 if (data.success) {
+                    // 显示系统消息
+                    addMessage('agent', 'Agent已启动。我是XiaowenAgent，你的智能助手。我可以帮你优化大纲、生成内容，并根据你的反馈持续学习和改进。\n\n请先填写"背景信息"、"输入大纲"和"优化要求"，然后点击"优化大纲"按钮开始。');
                     log('Agent 启动成功！');
                 } else {
+                    addMessage('agent', `错误：${data.error}`);
                     log(`错误: ${data.error}`);
                 }
             } catch (error) {
                 log(`错误: ${error.message}`);
+                addMessage('agent', `错误：${error.message}`);
+            } finally {
+                setLoading(false);
             }
         }
 
         async function resetAgent() {
             try {
+                setLoading(true);
                 log('重置 Agent...');
                 
                 const response = await fetch('/api/agent-test/reset', {
@@ -458,22 +466,18 @@
                 updateStatus(data);
                 
                 if (data.success) {
+                    // 显示系统消息
+                    addMessage('agent', 'Agent已重置。请重新开始。');
                     log('Agent 已重置！');
-                    // 清空对话历史
-                    document.getElementById('chatMessages').innerHTML = `
-                        <div class="message-card agent">
-                            <div class="message-header">
-                                <span class="message-role">智能体</span>
-                                <span class="message-time">系统消息</span>
-                            </div>
-                            <div class="message-content">Agent已重置。请重新开始。</div>
-                        </div>
-                    `;
                 } else {
+                    addMessage('agent', `错误：${data.error}`);
                     log(`错误: ${data.error}`);
                 }
             } catch (error) {
                 log(`错误: ${error.message}`);
+                addMessage('agent', `错误：${error.message}`);
+            } finally {
+                setLoading(false);
             }
         }
 
@@ -571,13 +575,47 @@
                 // 显示用户消息
                 addMessage('user', message);
                 
-                // 自动读取所有输入框内容，包括优化后的大纲
-                const context = {
-                    background: document.getElementById('backgroundInput').value,
-                    outline: document.getElementById('outlineInput').value,
-                    requirements: document.getElementById('requirementsInput').value,
-                    optimizedOutline: optimizedOutline // 传递优化后的大纲
-                };
+                // 根据当前步骤读取不同的输入框
+                let context = {};
+                let systemHint = '';
+                
+                if (currentStep === 1) {
+                    // 第一步：读取原始输入框
+                    context = {
+                        background: document.getElementById('backgroundInput')?.value || '',
+                        outline: document.getElementById('outlineInput')?.value || '',
+                        requirements: document.getElementById('requirementsInput')?.value || '',
+                        optimizedOutline: optimizedOutline
+                    };
+                    systemHint = '当前步骤：第一步 - 优化大纲。用户正在优化大纲的整体结构和内容。';
+                } else if (currentStep === 2) {
+                    // 第二步：读取文案生成配置
+                    const theme = document.getElementById('contentTheme')?.value || '';
+                    const type = document.getElementById('contentType')?.value || '';
+                    const count = document.getElementById('contentCount')?.value || '';
+                    const outline = document.getElementById('finalOutline')?.value || '';
+                    
+                    context = {
+                        background: `主题：${theme}\n类型：${type}\n篇数：${count}`,
+                        outline: outline,
+                        requirements: message,
+                        optimizedOutline: outline,
+                        currentStep: 2,
+                        theme: theme,
+                        type: type,
+                        count: count
+                    };
+                    systemHint = `当前步骤：第二步 - 形成文案。用户正在配置文案生成参数。
+                    
+重要提示：
+- 如果用户说"优化主题"，指的是优化整个系列的标题（主题），而不是大纲中每篇的主题
+- 如果用户说"优化大纲"，指的是优化下方"优化后的大纲"文本框中的内容
+- 当前主题（系列标题）：${theme}
+- 当前类型：${type}
+- 当前篇数：${count}
+
+请根据用户的意图，明确优化对应的内容。`;
+                }
                 
                 const response = await fetch('/api/agent-test/chat', {
                     method: 'POST',
@@ -586,7 +624,9 @@
                     },
                     body: JSON.stringify({
                         message: message,
-                        context: context
+                        context: context,
+                        currentStep: currentStep,
+                        systemHint: systemHint
                     })
                 });
                 
@@ -604,6 +644,14 @@
                         if (outlineMatch) {
                             optimizedOutline = outlineMatch[0].trim();
                             log('已更新优化后的大纲');
+                            
+                            // 如果在第二步，更新finalOutline文本框
+                            if (currentStep === 2) {
+                                const finalOutlineEl = document.getElementById('finalOutline');
+                                if (finalOutlineEl) {
+                                    finalOutlineEl.value = optimizedOutline;
+                                }
+                            }
                         }
                     }
                     
@@ -628,7 +676,9 @@
             alert('文案列表功能即将推出，敬请期待！');
         }
 
-        function goToNext() {
+        async function goToNext() {
+            console.log('goToNext called, optimizedOutline:', optimizedOutline);
+            
             if (!optimizedOutline) {
                 alert('请先优化大纲！');
                 return;
@@ -637,63 +687,161 @@
             if (currentStep === 1) {
                 // 进入第二步：生成文案
                 currentStep = 2;
-                showContentGenerationUI();
+                
+                // 先更新导航按钮
+                const navButtons = document.querySelector('.nav-buttons');
+                if (!navButtons) {
+                    console.error('nav-buttons not found');
+                    return;
+                }
+                
+                navButtons.innerHTML = `
+                    <button class="nav-btn prev" onclick="goBackToStep1()">
+                        ← 返回优化大纲
+                    </button>
+                    <span class="nav-step">
+                        第二步 - 形成文案
+                    </span>
+                    <button class="nav-btn next" onclick="generateContent()">
+                        生成文案 →
+                    </button>
+                `;
+                
+                // 显示文案生成界面
+                const inputBox = document.querySelectorAll('.status-box')[1];
+                if (!inputBox) {
+                    console.error('inputBox not found');
+                    return;
+                }
+                
+                inputBox.innerHTML = `
+                    <h3>文案生成配置</h3>
+                    <div style="margin: 15px 0;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 5px;">主题：</label>
+                        <input type="text" id="contentTheme" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;" 
+                               placeholder="正在提取主题...">
+                    </div>
+                    <div style="margin: 15px 0;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 5px;">类型：</label>
+                        <select id="contentType" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;">
+                            <option value="article">公众号文章</option>
+                            <option value="video">视频号图文</option>
+                            <option value="both" selected>BOTH</option>
+                        </select>
+                    </div>
+                    <div style="margin: 15px 0;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 5px;">篇数：</label>
+                        <input type="text" id="contentCount" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace; background: #f5f5f5;" 
+                               readonly placeholder="正在计算篇数...">
+                    </div>
+                    <div style="margin: 15px 0;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 5px;">优化后的大纲：</label>
+                        <textarea id="finalOutline" rows="10" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;" 
+                                  placeholder="优化后的大纲将显示在这里...">${optimizedOutline}</textarea>
+                    </div>
+                `;
+                
+                // 自动向智能体发送消息，告诉它下一步要做什么
+                const message = `大纲优化已完成，现在进入第二步：形成文案。
+
+请根据优化后的大纲，提取以下信息并以JSON格式返回：
+
+1. 主题（系列标题）：从大纲的第一个#标题中提取
+2. 类型：默认为"BOTH"（公众号文章+视频号图文）
+3. 篇数：统计大纲中##标题的数量
+
+请严格按照以下JSON格式返回：
+{
+  "theme": "主题内容",
+  "type": "BOTH",
+  "count": 篇数
+}
+
+只返回JSON，不要其他内容。`;
+
+                // 显示用户消息
+                addMessage('user', '进入第二步：形成文案');
+                
+                // 自动发送消息给智能体
+                try {
+                    setLoading(true);
+                    log('正在提取文案配置信息...');
+                    
+                    const context = {
+                        background: document.getElementById('backgroundInput')?.value || '',
+                        outline: document.getElementById('outlineInput')?.value || '',
+                        requirements: document.getElementById('requirementsInput')?.value || '',
+                        optimizedOutline: optimizedOutline
+                    };
+                    
+                    const systemHint = '当前步骤：从第一步切换到第二步。用户正在提取文案生成配置信息。';
+                    
+                    const response = await fetch('/api/agent-test/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            context: context,
+                            currentStep: 2,
+                            systemHint: systemHint
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // 显示智能体回复
+                        addMessage('agent', data.response);
+                        
+                        // 解析JSON响应
+                        try {
+                            const jsonMatch = data.response.match(/\{[\s\S]*\}/);
+                            if (jsonMatch) {
+                                const config = JSON.parse(jsonMatch[0]);
+                                
+                                // 填充界面
+                                if (config.theme) {
+                                    document.getElementById('contentTheme').value = config.theme;
+                                }
+                                if (config.type) {
+                                    document.getElementById('contentType').value = config.type;
+                                }
+                                if (config.count) {
+                                    document.getElementById('contentCount').value = config.count;
+                                }
+                                
+                                log('文案配置信息已提取');
+                            }
+                        } catch (parseError) {
+                            console.error('JSON解析错误:', parseError);
+                            log('JSON解析失败，使用默认值');
+                            
+                            // 使用默认值
+                            autoExtractThemeAndCount();
+                        }
+                    } else {
+                        addMessage('agent', `错误：${data.error}`);
+                        log(`错误: ${data.error}`);
+                        
+                        // 使用默认值
+                        autoExtractThemeAndCount();
+                    }
+                } catch (error) {
+                    log(`错误: ${error.message}`);
+                    addMessage('agent', `错误：${error.message}`);
+                    
+                    // 使用默认值
+                    autoExtractThemeAndCount();
+                } finally {
+                    setLoading(false);
+                }
             }
         }
 
-        function showContentGenerationUI() {
-            // 更新导航按钮
-            const navButtons = document.querySelector('.nav-buttons');
-            navButtons.innerHTML = `
-                <button class="nav-btn prev" onclick="goBackToStep1()">
-                    ← 返回优化大纲
-                </button>
-                <span class="nav-step">
-                    第二步 - 形成文案
-                </span>
-                <button class="nav-btn next" onclick="generateContent()">
-                    生成文案 →
-                </button>
-            `;
-            
-            // 显示文案生成界面
-            const statusBox = document.querySelector('.status-box:last-of-type');
-            statusBox.innerHTML = `
-                <h3>文案生成配置</h3>
-                <div style="margin: 15px 0;">
-                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">主题：</label>
-                    <input type="text" id="contentTheme" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;" 
-                           placeholder="根据大纲自动生成，可修改">
-                </div>
-                <div style="margin: 15px 0;">
-                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">类型：</label>
-                    <select id="contentType" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;">
-                        <option value="article">公众号文章</option>
-                        <option value="video">视频号图文</option>
-                        <option value="both" selected>BOTH</option>
-                    </select>
-                </div>
-                <div style="margin: 15px 0;">
-                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">篇数：</label>
-                    <input type="text" id="contentCount" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace; background: #f5f5f5;" 
-                           readonly placeholder="根据大纲自动生成">
-                </div>
-                <div style="margin: 15px 0;">
-                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">优化后的大纲：</label>
-                    <textarea id="finalOutline" rows="10" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;" 
-                              placeholder="优化后的大纲将显示在这里..."></textarea>
-                </div>
-            `;
-            
-            // 填充优化后的大纲
-            document.getElementById('finalOutline').value = optimizedOutline;
-            
-            // 自动提取主题和篇数
-            autoExtractThemeAndCount();
-        }
-
         function autoExtractThemeAndCount() {
-            const outline = document.getElementById('finalOutline').value;
+            const outline = document.getElementById('finalOutline')?.value || optimizedOutline;
             
             // 从大纲中提取主题（第一个#标题）
             const themeMatch = outline.match(/^#\s+(.+)$/m);
@@ -707,12 +855,76 @@
             document.getElementById('contentCount').value = count;
         }
 
-        function goBackToStep1() {
-            currentStep = 1;
-            location.reload(); // 简单重置回第一步
+        async function goBackToStep1() {
+            if (isLoading) {
+                log('正在处理中，请稍候...');
+                return;
+            }
+            
+            try {
+                setLoading(true);
+                log('返回第一步：优化大纲...');
+                
+                // 显示用户消息
+                addMessage('user', '返回第一步：优化大纲');
+                
+                // 向智能体发送消息
+                const message = `返回第一步：优化大纲。
+
+请恢复到优化大纲的状态，准备重新优化大纲。`;
+                
+                const context = {
+                    background: '',
+                    outline: '',
+                    requirements: '',
+                    optimizedOutline: ''
+                };
+                
+                const systemHint = '当前步骤：从第二步返回第一步。用户想要重新优化大纲。';
+                
+                const response = await fetch('/api/agent-test/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        context: context,
+                        currentStep: 1,
+                        systemHint: systemHint
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // 显示智能体回复
+                    addMessage('agent', data.response);
+                    log('已返回第一步');
+                    
+                    // 延迟刷新页面
+                    setTimeout(() => {
+                        currentStep = 1;
+                        location.reload();
+                    }, 1500);
+                } else {
+                    addMessage('agent', `错误：${data.error}`);
+                    log(`错误: ${data.error}`);
+                }
+            } catch (error) {
+                log(`错误: ${error.message}`);
+                addMessage('agent', `错误：${error.message}`);
+            } finally {
+                setLoading(false);
+            }
         }
 
-        function generateContent() {
+        async function generateContent() {
+            if (isLoading) {
+                log('正在处理中，请稍候...');
+                return;
+            }
+            
             const theme = document.getElementById('contentTheme').value;
             const type = document.getElementById('contentType').value;
             const count = document.getElementById('contentCount').value;
@@ -723,7 +935,77 @@
                 return;
             }
             
-            alert(`生成文案功能即将推出！\n\n主题：${theme}\n类型：${type}\n篇数：${count}`);
+            try {
+                setLoading(true);
+                log('开始生成文案...');
+                
+                // 显示用户消息
+                addMessage('user', '生成文案');
+                
+                // 向智能体发送消息
+                const message = `开始生成文案。
+
+配置信息：
+- 主题：${theme}
+- 类型：${type}
+- 篇数：${count}
+
+请根据大纲和配置信息，生成第一篇文案的内容。包括：
+1. 标题
+2. 正文内容
+3. 配图建议
+
+请返回完整的文案内容。`;
+                
+                const context = {
+                    background: `主题：${theme}\n类型：${type}\n篇数：${count}`,
+                    outline: outline,
+                    requirements: '生成文案',
+                    optimizedOutline: outline,
+                    currentStep: 2,
+                    theme: theme,
+                    type: type,
+                    count: count
+                };
+                
+                const systemHint = `当前步骤：第二步 - 形成文案。用户正在生成文案内容。
+                
+重要提示：
+- 用户想要根据大纲生成具体的文案内容
+- 当前主题（系列标题）：${theme}
+- 当前类型：${type}
+- 当前篇数：${count}
+- 请生成第一篇文案的完整内容`;
+                
+                const response = await fetch('/api/agent-test/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        context: context,
+                        currentStep: 2,
+                        systemHint: systemHint
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // 显示智能体回复
+                    addMessage('agent', data.response);
+                    log('文案已生成');
+                } else {
+                    addMessage('agent', `错误：${data.error}`);
+                    log(`错误: ${data.error}`);
+                }
+            } catch (error) {
+                log(`错误: ${error.message}`);
+                addMessage('agent', `错误：${error.message}`);
+            } finally {
+                setLoading(false);
+            }
         }
 
         log('页面加载完成，点击"启动 Agent"开始测试');
