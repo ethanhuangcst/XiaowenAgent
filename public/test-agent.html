@@ -185,6 +185,61 @@
         .log-entry {
             margin: 5px 0;
         }
+        
+        /* 导航区样式 */
+        .navigation-area {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .nav-btn {
+            padding: 12px 20px;
+            border: 1px solid #ddd;
+            background: white;
+            color: #333;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            transition: all 0.2s;
+        }
+        
+        .nav-btn:hover:not(.current) {
+            background: #e3f2fd;
+            border-color: #007bff;
+            color: #007bff;
+        }
+        
+        .nav-step {
+            flex: 2;
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #007bff;
+            background: #e3f2fd;
+            border: 2px solid #007bff;
+        }
+        
+        .nav-btn.prev, .nav-btn.next {
+            flex: 1;
+        }
+        
+        .nav-btn:disabled {
+            background: #ccc;
+            color: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
     </style>
 </head>
 <body>
@@ -259,6 +314,21 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- 导航区 -->
+            <div class="navigation-area">
+                <div class="nav-buttons">
+                    <button class="nav-btn prev" onclick="goToPrevious()">
+                        ← 返回文案列表
+                    </button>
+                    <span class="nav-step">
+                        第一步 - 优化大纲
+                    </span>
+                    <button class="nav-btn next" onclick="goToNext()">
+                        下一步：形成文案 →
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="log-box" id="logBox">
@@ -269,6 +339,7 @@
     <script>
         let isLoading = false;
         let optimizedOutline = ''; // 保存优化后的大纲
+        let currentStep = 1; // 当前步骤：1=优化大纲，2=生成文案
         
         function log(message) {
             const logBox = document.getElementById('logBox');
@@ -550,6 +621,109 @@
             } finally {
                 setLoading(false);
             }
+        }
+
+        // 导航功能
+        function goToPrevious() {
+            alert('文案列表功能即将推出，敬请期待！');
+        }
+
+        function goToNext() {
+            if (!optimizedOutline) {
+                alert('请先优化大纲！');
+                return;
+            }
+            
+            if (currentStep === 1) {
+                // 进入第二步：生成文案
+                currentStep = 2;
+                showContentGenerationUI();
+            }
+        }
+
+        function showContentGenerationUI() {
+            // 更新导航按钮
+            const navButtons = document.querySelector('.nav-buttons');
+            navButtons.innerHTML = `
+                <button class="nav-btn prev" onclick="goBackToStep1()">
+                    ← 返回优化大纲
+                </button>
+                <span class="nav-step">
+                    第二步 - 形成文案
+                </span>
+                <button class="nav-btn next" onclick="generateContent()">
+                    生成文案 →
+                </button>
+            `;
+            
+            // 显示文案生成界面
+            const statusBox = document.querySelector('.status-box:last-of-type');
+            statusBox.innerHTML = `
+                <h3>文案生成配置</h3>
+                <div style="margin: 15px 0;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">主题：</label>
+                    <input type="text" id="contentTheme" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;" 
+                           placeholder="根据大纲自动生成，可修改">
+                </div>
+                <div style="margin: 15px 0;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">类型：</label>
+                    <select id="contentType" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;">
+                        <option value="article">公众号文章</option>
+                        <option value="video">视频号图文</option>
+                        <option value="both" selected>BOTH</option>
+                    </select>
+                </div>
+                <div style="margin: 15px 0;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">篇数：</label>
+                    <input type="text" id="contentCount" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace; background: #f5f5f5;" 
+                           readonly placeholder="根据大纲自动生成">
+                </div>
+                <div style="margin: 15px 0;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">优化后的大纲：</label>
+                    <textarea id="finalOutline" rows="10" style="width: 100%; padding: 10px; border: 1px solid #ddd; font-family: monospace;" 
+                              placeholder="优化后的大纲将显示在这里..."></textarea>
+                </div>
+            `;
+            
+            // 填充优化后的大纲
+            document.getElementById('finalOutline').value = optimizedOutline;
+            
+            // 自动提取主题和篇数
+            autoExtractThemeAndCount();
+        }
+
+        function autoExtractThemeAndCount() {
+            const outline = document.getElementById('finalOutline').value;
+            
+            // 从大纲中提取主题（第一个#标题）
+            const themeMatch = outline.match(/^#\s+(.+)$/m);
+            if (themeMatch) {
+                document.getElementById('contentTheme').value = themeMatch[1].trim();
+            }
+            
+            // 计算篇数（## 标题的数量）
+            const countMatch = outline.match(/^##\s+/gm);
+            const count = countMatch ? countMatch.length : 1;
+            document.getElementById('contentCount').value = count;
+        }
+
+        function goBackToStep1() {
+            currentStep = 1;
+            location.reload(); // 简单重置回第一步
+        }
+
+        function generateContent() {
+            const theme = document.getElementById('contentTheme').value;
+            const type = document.getElementById('contentType').value;
+            const count = document.getElementById('contentCount').value;
+            const outline = document.getElementById('finalOutline').value;
+            
+            if (!outline.trim()) {
+                alert('大纲不能为空！');
+                return;
+            }
+            
+            alert(`生成文案功能即将推出！\n\n主题：${theme}\n类型：${type}\n篇数：${count}`);
         }
 
         log('页面加载完成，点击"启动 Agent"开始测试');
