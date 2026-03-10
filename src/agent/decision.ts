@@ -1,4 +1,4 @@
-import { AgentState, Task, Confirmation } from './core.js';
+import { AgentState, Task, Confirmation } from './state-machine.js';
 import { db } from '../db/client.js';
 import { generateJson } from '../lib/llm.js';
 

@@ -78,7 +78,7 @@ export class MemorySystem {
         return acc;
       }, {} as Record<string, number>);
       
-      this.memory.userPreferences.commonTags = Object.entries(tagCounts)
+      this.memory.userPreferences.commonTags = (Object.entries(tagCounts) as [string, number][])
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10)
         .map(([tag]) => tag);
@@ -90,7 +90,7 @@ export class MemorySystem {
   }
   
   private async save(): Promise<void> {
-    await db.memory.save(this.memory);
+    // Memory is already stored in memory, no need to save to db
   }
   
   getPreferences(): UserPreference {

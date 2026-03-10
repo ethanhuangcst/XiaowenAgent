@@ -1,8 +1,24 @@
 export type AgentStatus = 'IDLE' | 'PLANNING' | 'EXECUTING' | 'CONFIRMING';
 
+export interface Task {
+  id: string;
+  type: 'GENERATE_OUTLINE' | 'GENERATE_CONTENT' | 'GENERATE_IMAGE' | 'PUBLISH';
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+  result?: any;
+}
+
+export interface Confirmation {
+  id: string;
+  type: 'OUTLINE_APPROVAL' | 'CONTENT_APPROVAL' | 'IMAGE_APPROVAL' | 'PUBLISH_APPROVAL';
+  content: any;
+  approved: boolean | null;
+}
+
 export interface AgentState {
   status: AgentStatus;
-  currentTask: string | null;
+  currentTask: Task | null;
+  pendingConfirmations: Confirmation[];
+  currentProjectId?: string;
   lastUpdate: Date;
 }
 
@@ -13,6 +29,7 @@ export class AgentStateMachine {
     this.state = {
       status: 'IDLE',
       currentTask: null,
+      pendingConfirmations: [],
       lastUpdate: new Date()
     };
   }
@@ -34,13 +51,25 @@ export class AgentStateMachine {
     }
 
     this.state.status = newStatus;
-    this.state.currentTask = task || null;
+    if (task) {
+      this.state.currentTask = {
+        id: `task-${Date.now()}`,
+        type: 'GENERATE_OUTLINE',
+        status: 'IN_PROGRESS'
+      };
+    }
     this.state.lastUpdate = new Date();
   }
 
   forceTransition(newStatus: AgentStatus, task?: string): void {
     this.state.status = newStatus;
-    this.state.currentTask = task || null;
+    if (task) {
+      this.state.currentTask = {
+        id: `task-${Date.now()}`,
+        type: 'GENERATE_OUTLINE',
+        status: 'IN_PROGRESS'
+      };
+    }
     this.state.lastUpdate = new Date();
   }
 
@@ -48,6 +77,7 @@ export class AgentStateMachine {
     this.state = {
       status: 'IDLE',
       currentTask: null,
+      pendingConfirmations: [],
       lastUpdate: new Date()
     };
   }

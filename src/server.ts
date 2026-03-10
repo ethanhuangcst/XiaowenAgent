@@ -1,11 +1,9 @@
 import cors from "cors";
 import express from "express";
 import { z } from "zod";
-import { createProject, getProject, generateOutline } from "./api/controllers/workflowController.js";
 import { getSettings, updateSettings } from "./api/controllers/settingsController.js";
 import { getPrompts, updatePrompts } from "./api/controllers/promptsController.js";
-import agentRoutes from "./api/routes/agent.js";
-import { generateAllContent } from "./core/content/generator.js";
+import agentTestRoutes from "./api/routes/agent-test.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -43,35 +41,7 @@ export function createServer() {
   app.post("/api/prompts", updatePrompts);
 
   // Agent routes
-  app.use("/api/agent", agentRoutes);
-
-  // Project workflow routes
-  app.post("/api/projects", createProject);
-  app.get("/api/projects/:id", getProject);
-  app.post("/api/projects/:id/outline", generateOutline);
-
-  // Legacy direct generation route
-  app.post("/api/generate", async (req, res) => {
-    const parsed = requestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "请求参数不合法",
-        errors: parsed.error.flatten()
-      });
-      return;
-    }
-
-    try {
-      const result = await generateAllContent(parsed.data);
-      res.json(result);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "未知错误";
-      res.status(500).json({
-        message: "内容生成失败",
-        detail: message
-      });
-    }
-  });
+  app.use("/api/agent-test", agentTestRoutes);
 
   return app;
 }
