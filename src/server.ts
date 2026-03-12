@@ -4,6 +4,8 @@ import { z } from "zod";
 import { getSettings, updateSettings } from "./api/controllers/settingsController.js";
 import { getPrompts, updatePrompts } from "./api/controllers/promptsController.js";
 import agentTestRoutes from "./api/routes/agent-test.js";
+import simpleAgentRoutes from "./api/routes/simple-agent.js";
+import mcpRoutes from "./api/routes/mcp.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -42,6 +44,8 @@ export function createServer() {
 
   // Agent routes
   app.use("/api/agent-test", agentTestRoutes);
+  app.use("/api/simple-agent", simpleAgentRoutes);
+  app.use("/api/mcp", mcpRoutes);
 
   return app;
 }

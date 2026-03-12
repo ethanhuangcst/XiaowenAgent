@@ -240,6 +240,90 @@
             cursor: not-allowed;
             opacity: 0.6;
         }
+        
+        /* 预览窗口 */
+        .preview-window {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            width: 400px;
+            max-height: 80vh;
+            background: white;
+            border: 2px solid #007bff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .preview-window.collapsed {
+            max-height: 50px;
+        }
+        
+        .preview-header {
+            background: #007bff;
+            color: white;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .preview-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+        
+        .toggle-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+        
+        .preview-content {
+            padding: 15px;
+            overflow-y: auto;
+            max-height: calc(80vh - 50px);
+        }
+        
+        .preview-placeholder {
+            color: #999;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .preview-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+        }
+        
+        .preview-item-header {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .preview-item-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.6;
+            font-size: 13px;
+        }
+        
+        .preview-item-meta {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+            font-size: 12px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -334,12 +418,61 @@
         <div class="log-box" id="logBox">
             <div class="log-entry">等待操作...</div>
         </div>
+        
+        <!-- 预览窗口 -->
+        <div class="preview-window" id="previewWindow">
+            <div class="preview-header">
+                <h3>📝 文案预览</h3>
+                <button class="toggle-btn" onclick="togglePreview()">−</button>
+            </div>
+            <div class="preview-content" id="previewContent">
+                <div class="preview-placeholder">
+                    暂无文案，请先生成文案
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
         let isLoading = false;
         let optimizedOutline = ''; // 保存优化后的大纲
         let currentStep = 1; // 当前步骤：1=优化大纲，2=生成文案
+        let generatedContents = {}; // 保存生成的文案
+        
+        // 预览窗口管理
+        function togglePreview() {
+            const previewWindow = document.getElementById('previewWindow');
+            const toggleBtn = previewWindow.querySelector('.toggle-btn');
+            previewWindow.classList.toggle('collapsed');
+            toggleBtn.textContent = previewWindow.classList.contains('collapsed') ? '+' : '−';
+        }
+        
+        function updatePreview() {
+            const previewContent = document.getElementById('previewContent');
+            
+            if (Object.keys(generatedContents).length === 0) {
+                previewContent.innerHTML = '<div class="preview-placeholder">暂无文案，请先生成文案</div>';
+                return;
+            }
+            
+            let html = '';
+            for (const [index, content] of Object.entries(generatedContents)) {
+                html += `
+                    <div class="preview-item">
+                        <div class="preview-item-header">第${parseInt(index) + 1}篇</div>
+                        <div class="preview-item-content">${escapeHtml(content)}</div>
+                    </div>
+                `;
+            }
+            
+            previewContent.innerHTML = html;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
         
         function log(message) {
             const logBox = document.getElementById('logBox');
@@ -940,7 +1073,7 @@
                 log('开始生成文案...');
                 
                 // 显示用户消息
-                addMessage('user', '生成文案');
+                addMessage('user', '开始生成文案');
                 
                 // 向智能体发送消息
                 const message = `开始生成文案。
@@ -950,32 +1083,54 @@
 - 类型：${type}
 - 篇数：${count}
 
-请根据大纲和配置信息，生成第一篇文案的内容。包括：
-1. 标题
-2. 正文内容
-3. 配图建议
+请根据大纲和配置信息，生成第一篇文案的内容。
 
-请返回完整的文案内容。`;
+重要提示：
+1. 如果用户说"生成第N篇"，就生成第N篇文案
+2. 如果用户说"修改"，就根据用户反馈修改当前文案
+3. 如果用户说"保存"，就保存当前文案
+4. 如果用户说"下一篇"或"上一篇"，就切换到对应的文案
+5. 如果用户说"显示所有文案"，就列出所有已生成的文案
+
+请生成第一篇文案的完整内容，并告诉用户如何继续操作。
+
+返回格式要求：
+- 如果是生成新文案，请在回复的最后用JSON格式标注：
+  [CONTENT_INDEX:1]
+  这样我可以自动更新预览窗口
+- 如果是修改文案，请在回复的最后用JSON格式标注：
+  [CONTENT_INDEX:N]
+  其中N是篇数（1-20）`;
                 
                 const context = {
                     background: `主题：${theme}\n类型：${type}\n篇数：${count}`,
                     outline: outline,
                     requirements: '生成文案',
                     optimizedOutline: outline,
-                    currentStep: 2,
+                    currentStep: 3,
                     theme: theme,
                     type: type,
                     count: count
                 };
                 
-                const systemHint = `当前步骤：第二步 - 形成文案。用户正在生成文案内容。
-                
+                const systemHint = `当前步骤：第三步 - 生成文案。用户正在生成和管理文案内容。
+
 重要提示：
-- 用户想要根据大纲生成具体的文案内容
 - 当前主题（系列标题）：${theme}
 - 当前类型：${type}
 - 当前篇数：${count}
-- 请生成第一篇文案的完整内容`;
+- 你需要管理所有文案的生成、修改、保存和切换
+- 用户可以通过对话指令操作文案：
+  - "生成第N篇"：生成第N篇文案
+  - "修改"：修改当前文案
+  - "保存"：保存当前文案
+  - "下一篇"/"上一篇"：切换文案
+  - "显示所有文案"：列出所有已生成的文案
+- 请主动告诉用户当前状态（第几篇、是否保存等）
+- 生成内容时，根据类型生成：
+  - 视频号图文：5-7段精要内容
+  - 公众号文章：至少500字的完整文章
+  - BOTH：同时生成两种格式`;
                 
                 const response = await fetch('/api/agent-test/chat', {
                     method: 'POST',
@@ -985,7 +1140,7 @@
                     body: JSON.stringify({
                         message: message,
                         context: context,
-                        currentStep: 2,
+                        currentStep: 3,
                         systemHint: systemHint
                     })
                 });
@@ -996,6 +1151,22 @@
                     // 显示智能体回复
                     addMessage('agent', data.response);
                     log('文案已生成');
+                    
+                    // 解析智能体返回，提取文案内容
+                    const contentMatch = data.response.match(/\[CONTENT_INDEX:(\d+)\]/);
+                    if (contentMatch) {
+                        const contentIndex = contentMatch[1];
+                        // 提取文案内容（去掉标记）
+                        const content = data.response.replace(/\[CONTENT_INDEX:\d+\]/, '').trim();
+                        
+                        // 保存到generatedContents
+                        generatedContents[contentIndex] = content;
+                        
+                        // 更新预览窗口
+                        updatePreview();
+                        
+                        log(`已更新预览窗口：第${contentIndex}篇`);
+                    }
                 } else {
                     addMessage('agent', `错误：${data.error}`);
                     log(`错误: ${data.error}`);

@@ -17,6 +17,19 @@ export class XiaowenAgent {
   private promptTemplateManager: PromptTemplateManager;
   private toolManager: ToolManager;
   private config: AgentConfig;
+  
+  // 添加状态管理
+  private currentContentIndex: number = 0; // 当前篇数（从0开始）
+  private totalContents: number = 0; // 总篇数
+  private generatedContents: Map<number, string> = new Map(); // 已生成的文案
+  private context: {
+    background?: string;
+    outline?: string;
+    requirements?: string;
+    optimizedOutline?: string;
+    theme?: string;
+    type?: string;
+  } = {};
 
   constructor(config: AgentConfig) {
     this.config = config;
@@ -106,26 +119,48 @@ export class XiaowenAgent {
         return outline;
       }
       
-      // 2. 使用Hook优化工具
+      // 2. 使用Hook优化工具（添加超时和错误处理）
       console.log('📞 调用Hook优化工具...');
-      const hookResult = await this.toolManager.callTool('optimize_hook', {
-        background: background,
-        keyMessage: keyMessage,
-        targetAudience: '微信公众号读者'
-      });
+      let hookResult;
+      try {
+        hookResult = await Promise.race([
+          this.toolManager.callTool('optimize_hook', {
+            background: background,
+            keyMessage: keyMessage,
+            targetAudience: '微信公众号读者'
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Hook优化超时')), 30000)
+          )
+        ]) as any;
+        
+        console.log('✅ Hook优化完成:', hookResult.hook);
+      } catch (hookError) {
+        console.log('⚠️ Hook优化失败，使用原始内容:', hookError);
+        return outline; // 如果工具调用失败，返回原始大纲
+      }
       
-      console.log('✅ Hook优化完成:', hookResult.hook);
-      
-      // 3. 使用热门话题搜索工具
+      // 3. 使用热门话题搜索工具（添加超时和错误处理）
       console.log('📞 调用热门话题搜索工具...');
-      const keywords = this.extractKeywords(outline);
-      const hotTopicResult = await this.toolManager.callTool('search_hot_topics', {
-        content: outline,
-        keywords: keywords,
-        platform: 'wechat'
-      });
-      
-      console.log('✅ 热门话题搜索完成:', hotTopicResult.recommendedTags);
+      let hotTopicResult;
+      try {
+        const keywords = this.extractKeywords(outline);
+        hotTopicResult = await Promise.race([
+          this.toolManager.callTool('search_hot_topics', {
+            content: outline,
+            keywords: keywords,
+            platform: 'wechat'
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('热门话题搜索超时')), 30000)
+          )
+        ]) as any;
+        
+        console.log('✅ 热门话题搜索完成:', hotTopicResult.recommendedTags);
+      } catch (topicError) {
+        console.log('⚠️ 热门话题搜索失败，使用原始内容:', topicError);
+        return outline; // 如果工具调用失败，返回原始大纲
+      }
       
       // 4. 替换优化后的Hook和标签
       let optimizedOutline = outline;
@@ -457,6 +492,10 @@ export class XiaowenAgent {
     outline?: string;
     requirements?: string;
     optimizedOutline?: string;
+    currentStep?: number;
+    theme?: string;
+    type?: string;
+    count?: number;
   }, currentStep?: number, systemHint?: string): Promise<string> {
     console.log('💬 开始对话...');
     
@@ -469,30 +508,156 @@ export class XiaowenAgent {
     
     this.stateMachine.transition('PLANNING', '对话');
     
+    // 保存上下文
+    if (context) {
+      if (context.background) this.context.background = context.background;
+      if (context.outline) this.context.outline = context.outline;
+      if (context.requirements) this.context.requirements = context.requirements;
+      if (context.optimizedOutline) this.context.optimizedOutline = context.optimizedOutline;
+      if (context.theme) this.context.theme = context.theme;
+      if (context.type) this.context.type = context.type;
+      if (context.count) this.totalContents = context.count;
+    }
+    
+    // 解析用户意图
+    const intent = this.parseUserIntent(message);
+    console.log('用户意图:', intent);
+    
     // 使用动态System Prompt
     const systemTemplate = this.promptTemplateManager.getTemplate('system-prompt-expert');
     if (!systemTemplate) {
       throw new Error('Template not found: system-prompt-expert');
     }
-    const systemPrompt = this.promptTemplateManager.renderTemplate(systemTemplate, {
-      role: '智能助手',
-      expertise: '擅长理解用户需求并提供帮助',
-      instruction: '请根据用户的消息和上下文提供有用的回复'
-    });
     
-    // 构建包含上下文的Prompt
-    const prompt = `背景信息：${context?.background || '无'}
+    let systemPrompt = '';
+    let prompt = '';
+    
+    // 根据意图构建不同的prompt
+    if (intent.type === 'generate_content') {
+      // 生成文案
+      const contentIndex = intent.index !== undefined ? intent.index : this.currentContentIndex;
+      this.currentContentIndex = contentIndex;
+      
+      systemPrompt = this.promptTemplateManager.renderTemplate(systemTemplate, {
+        role: '文案创作专家',
+        expertise: '擅长根据大纲生成高质量的视频号图文和公众号文章',
+        instruction: `请根据大纲生成第${contentIndex + 1}篇文案
 
-输入大纲：${context?.outline || '无'}
+当前状态：
+- 总篇数：${this.totalContents}
+- 当前篇数：第${contentIndex + 1}篇
+- 类型：${this.context.type || 'BOTH'}
+- 主题：${this.context.theme || '未设置'}
 
-优化要求：${context?.requirements || '无'}
-优化后的大纲：${context?.optimizedOutline || '无'}
+背景信息：
+${this.context.background || '无'}
+
+优化后的大纲：
+${this.context.optimizedOutline || '无'}
+
+请生成第${contentIndex + 1}篇文案的完整内容。`
+      });
+      
+      prompt = `请生成第${contentIndex + 1}篇文案。
+
+重要提示：
+1. 严格按照大纲的内容和结构生成
+2. 如果类型是视频号图文，生成5-7段精要内容
+3. 如果类型是公众号文章，生成至少500字的完整文章
+4. 如果类型是BOTH，同时生成两种格式
+5. 内容要吸引眼球，符合背景信息中的定位
+
+请在回复的最后添加标记：[CONTENT_INDEX:${contentIndex + 1}]`;
+      
+    } else if (intent.type === 'next_content') {
+      // 下一篇
+      if (this.currentContentIndex < this.totalContents - 1) {
+        this.currentContentIndex++;
+      } else {
+        return `已经是最后一篇了（第${this.totalContents}篇）。没有更多内容了。`;
+      }
+      
+      // 检查是否已生成
+      if (this.generatedContents.has(this.currentContentIndex)) {
+        return `切换到第${this.currentContentIndex + 1}篇。\n\n${this.generatedContents.get(this.currentContentIndex)}\n\n[CONTENT_INDEX:${this.currentContentIndex + 1}]`;
+      } else {
+        // 生成新的
+        return this.chat(`生成第${this.currentContentIndex + 1}篇`, context, currentStep, systemHint);
+      }
+      
+    } else if (intent.type === 'prev_content') {
+      // 上一篇
+      if (this.currentContentIndex > 0) {
+        this.currentContentIndex--;
+      } else {
+        return `已经是第一篇了。没有上一篇了。`;
+      }
+      
+      // 检查是否已生成
+      if (this.generatedContents.has(this.currentContentIndex)) {
+        return `切换到第${this.currentContentIndex + 1}篇。\n\n${this.generatedContents.get(this.currentContentIndex)}\n\n[CONTENT_INDEX:${this.currentContentIndex + 1}]`;
+      } else {
+        // 生成新的
+        return this.chat(`生成第${this.currentContentIndex + 1}篇`, context, currentStep, systemHint);
+      }
+      
+    } else if (intent.type === 'modify_content') {
+      // 修改当前文案
+      systemPrompt = this.promptTemplateManager.renderTemplate(systemTemplate, {
+        role: '文案优化专家',
+        expertise: '擅长根据用户反馈优化文案',
+        instruction: `请根据用户的反馈修改当前文案
+
+当前状态：
+- 当前篇数：第${this.currentContentIndex + 1}篇
+- 类型：${this.context.type || 'BOTH'}
+
+当前文案：
+${this.generatedContents.get(this.currentContentIndex) || '无'}
+
+请根据用户反馈修改文案。`
+      });
+      
+      prompt = `用户反馈：${message}
+
+请根据用户反馈修改当前文案，并在回复的最后添加标记：[CONTENT_INDEX:${this.currentContentIndex + 1}]`;
+      
+    } else if (intent.type === 'save_content') {
+      // 保存当前文案
+      return `已保存第${this.currentContentIndex + 1}篇文案。`;
+      
+    } else if (intent.type === 'list_contents') {
+      // 显示所有文案
+      let result = `已生成的文案列表：\n\n`;
+      for (const [index, content] of this.generatedContents) {
+        result += `第${index + 1}篇：\n${content.substring(0, 100)}...\n\n`;
+      }
+      return result;
+      
+    } else {
+      // 默认对话
+      systemPrompt = this.promptTemplateManager.renderTemplate(systemTemplate, {
+        role: '智能助手',
+        expertise: '擅长理解用户需求并提供帮助',
+        instruction: '请根据用户的消息和上下文提供有用的回复'
+      });
+      
+      prompt = `背景信息：${this.context.background || '无'}
+
+输入大纲：${this.context.outline || '无'}
+
+优化要求：${this.context.requirements || '无'}
+优化后的大纲：${this.context.optimizedOutline || '无'}
 用户反馈：${message}
 当前步骤信息：${systemHint || '无'}
 
-请根据用户的反馈，优化大纲或提供建议。如果用户反馈是关于大纲优化的，请重新优化大纲。
+当前状态：
+- 总篇数：${this.totalContents}
+- 当前篇数：第${this.currentContentIndex + 1}篇
+- 已生成篇数：${this.generatedContents.size}
 
-`;
+请根据用户的反馈，优化大纲或提供建议。`;
+    }
 
     try {
       this.stateMachine.transition('EXECUTING', '调用LLM');
@@ -510,10 +675,61 @@ export class XiaowenAgent {
         timestamp: new Date()
       });
       
+      // 如果是生成或修改文案，保存到generatedContents
+      if (intent.type === 'generate_content' || intent.type === 'modify_content') {
+        const content = response.content.replace(/\[CONTENT_INDEX:\d+\]/, '').trim();
+        this.generatedContents.set(this.currentContentIndex, content);
+        console.log(`✅ 已保存第${this.currentContentIndex + 1}篇文案`);
+      }
+      
       return response.content;
     } catch (error) {
       this.stateMachine.forceTransition('IDLE');
       throw error;
     }
+  }
+  
+  private parseUserIntent(message: string): {
+    type: 'generate_content' | 'next_content' | 'prev_content' | 'modify_content' | 'save_content' | 'list_contents' | 'other';
+    index?: number;
+  } {
+    const lowerMessage = message.toLowerCase();
+    
+    // 生成第N篇
+    const generateMatch = message.match(/生成第?(\d+)篇/);
+    if (generateMatch) {
+      return {
+        type: 'generate_content',
+        index: parseInt(generateMatch[1]) - 1 // 转换为0-based索引
+      };
+    }
+    
+    // 下一篇
+    if (lowerMessage.includes('下一篇') || lowerMessage.includes('下一遍') || lowerMessage.includes('next')) {
+      return { type: 'next_content' };
+    }
+    
+    // 上一篇
+    if (lowerMessage.includes('上一篇') || lowerMessage.includes('上一遍') || lowerMessage.includes('prev')) {
+      return { type: 'prev_content' };
+    }
+    
+    // 保存
+    if (lowerMessage.includes('保存') || lowerMessage.includes('save')) {
+      return { type: 'save_content' };
+    }
+    
+    // 显示所有
+    if (lowerMessage.includes('显示所有') || lowerMessage.includes('列出所有') || lowerMessage.includes('list')) {
+      return { type: 'list_contents' };
+    }
+    
+    // 修改
+    if (lowerMessage.includes('修改') || lowerMessage.includes('改') || lowerMessage.includes('优化') || lowerMessage.includes('调整')) {
+      return { type: 'modify_content' };
+    }
+    
+    // 默认
+    return { type: 'other' };
   }
 }
